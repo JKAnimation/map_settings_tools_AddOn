@@ -1,0 +1,15 @@
+# This is an Asset Catalog Definition file for Blender.
+#
+# Empty lines and lines starting with `#` will be ignored.
+# The first non-ignored line should be the version indicator.
+# Other lines are of the format "UUID:catalog/path/for/assets:simple catalog name"
+
+VERSION 1
+
+452dc7c4-61a2-4002-b885-f11f02393aca:GN_Catalog:GN_Catalog
+d4c1e8d4-d6c6-4137-99c6-51995dbb4fec:GN_Catalog/Buildings:GN_Catalog-Buildings
+6e8e66fa-e1f8-4305-bb3d-07636fd44905:GN_Catalog/Catalog:GN_Catalog-Catalog
+c4733c66-fb1b-4dac-ae97-c42a98790c40:GN_Catalog/Helpers:GN_Catalog-Helpers
+279dbfbb-1e2d-4936-be34-2190d7cb5c8e:GN_Catalog/Modeling:GN_Catalog-Modeling
+bcc60af9-f280-4e4a-9ec3-99dfcd7966c0:GN_Catalog/Objects_Distribution:GN_Catalog-Objects_Distribution
+ec1d4ac4-d9ed-43a6-ba04-37ec8ff0f9bb:GN_Catalog/UV_Helper:GN_Catalog-UV_Helper
