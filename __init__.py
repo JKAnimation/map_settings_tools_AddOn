@@ -1,7 +1,9 @@
 bl_info = {
     "name": "Map Setting Tools",
-    "blender": (3, 0, 0),
+    "blender": (4,3,2),
     "category": "Object",
+    "author": "juankanimation",
+    "version": (3,0,0),
 }
 
 import bpy
