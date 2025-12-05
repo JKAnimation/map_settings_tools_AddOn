@@ -21,7 +21,7 @@ def join_objects(object_names, new_name):
         if joined_obj:
             joined_obj.name = new_name
             joined_obj.data.name = new_name
-            return joined_obj.name  # Devuelve el nombre del nuevo objeto unido
+            return joined_obj.name
     return None
 
 def add_uv_map(obj_name):
@@ -34,12 +34,9 @@ def add_uv_map(obj_name):
 
 def join_objects_by_prefix(object_names, prefix_map):
     """Une objetos en grupos según su prefijo."""
-    
     processed_names = set()
-    
     for prefix, new_name in prefix_map.items():
         objs_to_join = [name for name in object_names if name.startswith(prefix) and name not in processed_names]
-
         if objs_to_join:
             joined_name = join_objects(objs_to_join, new_name=new_name)
             if joined_name:
@@ -89,11 +86,9 @@ class OBJECT_OT_standard_settings(bpy.types.Operator):
         self.report({'INFO'}, f"Se aplicaron configuraciones a la colección '{active_collection.name}'.")
         return {'FINISHED'}
 
-def register():
-    bpy.utils.register_class(OBJECT_OT_standard_settings)
-
-def unregister():
-    bpy.utils.unregister_class(OBJECT_OT_standard_settings)
-
-if __name__ == "__main__":
-    register()
+# ------------------------------------------------------------
+# Lista de clases exportadas por este módulo
+# ------------------------------------------------------------
+classes = (
+    OBJECT_OT_standard_settings,
+)

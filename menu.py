@@ -39,37 +39,7 @@ class VIEW3D_PT_building__tools(bpy.types.Panel):
         layout.prop(context.scene, "export_csv_path", text="Ruta Exportación")
 
 
-class VIEW3D_PT_set_dressing_tools(bpy.types.Panel):
-    bl_label = "Set dressing Tools"
-    bl_idname = "VIEW3D_PT_set_dressing_tools"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Map Setting Tools'
 
-    def draw(self, context):  # Añadir la función draw
-        layout = self.layout
-
-        row = layout.row(align=True)
-        row.operator("object.apply_activecollection_sys")
-        row.operator("object.clean_setdressing_collections")
-        layout.prop(context.scene, "split_collection")
-
-        # Crear botones para cargar cada uno de los nodos
-        layout.label(text="Node tools")
-        row = layout.row(align=True)
-        row.operator("object.load_landmark_plates", text="Land Facades", icon='HOME')
-        row.operator("object.load_multisnap", text="Z Snap", icon='SNAP_ON')
-        row.operator("object.load_edge_distribution", text="Edge Dist", icon='SEQ_LUMA_WAVEFORM')
-
-        row = layout.row(align=True)
-        
-        row.operator("object.area_distribution", text="Area Dist")
-        row.operator("object.post_flags", text="Post Flags", icon='BOOKMARKS')
-        row.operator("object.clean_nearest", text="Clean Nearest", icon='BRUSH_DATA')
-
-        row = layout.row(align=True)
-        row.operator("object.road_paths", text="Road Paths", icon='TRACKING')
-        row.operator("object.flat_borders", text="Flat Borders", icon='MOD_OUTLINE')
 
 
 class VIEW3D_PT_export_tools(bpy.types.Panel):

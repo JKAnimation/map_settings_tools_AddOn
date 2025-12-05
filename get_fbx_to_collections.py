@@ -43,3 +43,11 @@ class OBJECT_OT_import_fbx_to_collections(bpy.types.Operator):
 
         self.report({'INFO'}, f"{len(fbx_files)} archivos FBX importados correctamente")
         return {'FINISHED'}
+    
+    # ------------------------------------------------------------
+# NUEVO: lista de clases que exporta este módulo
+# ------------------------------------------------------------
+classes = (
+    OBJECT_OT_import_fbx_to_collections,
+)
+

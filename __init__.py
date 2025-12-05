@@ -1,78 +1,56 @@
 bl_info = {
     "name": "Map Setting Tools",
-    "blender": (4,3,2),
+    "blender": (5, 0, 0),
     "category": "Object",
     "author": "juankanimation",
-    "version": (3,0,0),
+    "version": (3, 0, 0),
 }
 
 import bpy
 import os
 
-# Importar operadores
-from .import_fbx_to_collections import OBJECT_OT_import_fbx_to_collections
-from .rename_plates import OBJECT_OT_rename_plates
-from .apply_fullbuilding_sys import OBJECT_OT_apply_fullbuilding_sys
-from .apply_activecollection_sys import OBJECT_OT_apply_activecollection_sys
-from .update_fullbuilding_sys_inputs import OBJECT_OT_update_fullbuilding_sys_inputs
-from .standard_settings import OBJECT_OT_standard_settings
-from .blocking_settings import OBJECT_OT_blocking_settings
-from .clean_setdressing_collections import OBJECT_OT_clean_setdressing_collections
-from .clean_building_collections import OBJECT_OT_clean_building_collections
-from .export_fbx import OBJECT_OT_export_fbx
-from .clean_figma_curves import OBJECT_OT_clean_figma_curves
-from .export_buildings_fbx import OBJECT_OT_buildings_export_fbx
-from .generate_csv_report import OBJECT_OT_generate_csv_report
+# -------------------------------------------------------------------------
+# Importar módulos
+# -------------------------------------------------------------------------
 
-# Importar operadores de Geometry Nodes
-from .load_geometry_nodes import (
-    OBJECT_OT_load_landmark_plates,
-    OBJECT_OT_load_multisnap,
-    OBJECT_OT_load_edge_distribution,
-    OBJECT_OT_load_area_distribution,
-    OBJECT_OT_PostsWithFlags,
-    OBJECT_OT_CleanNearest,
-    OBJECT_OT_RoadPaths,
-    OBJECT_OT_FlatBorders,
-)
+from . import import_fbx_to_collections
+from . import rename_plates
+from . import apply_fullbuilding_sys
+from . import apply_activecollection_sys
+from . import update_fullbuilding_sys_inputs
+from . import standard_settings
+from . import blocking_settings
+from . import clean_setdressing_collections
+from . import clean_building_collections
+from . import export_fbx
+from . import clean_figma_curves
+from . import export_buildings_fbx
+from . import generate_csv_report
 
-# Importar operadores de orden de objetos
-from .object_order_tools import (
-    OBJECT_UL_custom_list,
-    ObjectListItem,
-    OBJECT_OT_add_to_list,
-    OBJECT_OT_remove_from_list,
-    OBJECT_OT_move_item,
-    OBJECT_OT_apply_order,
-)
+# Geometry Nodes
+from . import load_geometry_nodes
 
-# Importar procesador de mallas
-from .procesar_mallas import (
-    OBJECT_OT_procesar_desde_coleccion,
-    ProcesarDuplicadorProps,
-)
+# Ordenamiento de objetos
+from . import object_order_tools
 
-# NUEVO: importar actualización de colección externa
-from .actualizar_coleccion_externa import (
-    OBJECT_OT_actualizar_coleccion_externa,
-    ActualizarFBXProps,
-)
+# Procesador de mallas
+from . import procesar_mallas
 
-# Importar paneles
-from .menu import (
-    VIEW3D_PT_map_setting_tools,
-    VIEW3D_PT_building__tools,
-    VIEW3D_PT_set_dressing_tools,
-    VIEW3D_PT_export_tools,
-    VIEW3D_PT_collection_list_tools,
-    VIEW3D_PT_procesar_mallas,
-)
+# Actualizar FBX externo
+from . import actualizar_coleccion_externa
 
+# Paneles
+from . import menu
+
+
+# -------------------------------------------------------------------------
 # Registrar propiedades
+# -------------------------------------------------------------------------
+
 def register_properties():
     bpy.types.Scene.export_folder = bpy.props.StringProperty(
         name="Export Folder",
-        description="Selecciona la carpeta para exportar los archivos FBX",
+        description="Selecciona la carpeta para exportar",
         subtype='DIR_PATH'
     )
 
@@ -85,101 +63,110 @@ def register_properties():
     bpy.types.Scene.split_collection = bpy.props.PointerProperty(
         type=bpy.types.Collection,
         name="Split collection",
-        description="Seleccionar una colección para almacenar instancias"
     )
 
     bpy.types.Scene.entrances_collection = bpy.props.PointerProperty(
         type=bpy.types.Collection,
         name="Entrances collection",
-        description="Seleccionar una colección para montar las entradas de los landmarks"
     )
 
     bpy.types.Scene.export_csv_path = bpy.props.StringProperty(
         name="Export CSV Path",
-        description="Selecciona la carpeta para guardar el archivo CSV",
+        description="Carpeta donde se guardará el CSV",
         default="//",
         subtype='DIR_PATH'
     )
 
-    bpy.types.Scene.my_objects = bpy.props.CollectionProperty(type=ObjectListItem)
+    # Lista de orden manual
+    bpy.types.Scene.my_objects = bpy.props.CollectionProperty(
+        type=object_order_tools.ObjectListItem
+    )
     bpy.types.Scene.my_objects_index = bpy.props.IntProperty()
 
-    bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=ProcesarDuplicadorProps)
+    # Props de procesar mallas
+    bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(
+        type=procesar_mallas.ProcesarDuplicadorProps
+    )
 
-    # NUEVA propiedad para actualizar FBX desde archivo externo
-    bpy.types.Scene.actualizar_fbx_props = bpy.props.PointerProperty(type=ActualizarFBXProps)
+    bpy.types.Scene.actualizar_fbx_props = bpy.props.PointerProperty(
+        type=actualizar_coleccion_externa.ActualizarFBXProps
+    )
+
 
 def unregister_properties():
-    del bpy.types.Scene.create_road_help
-    del bpy.types.Scene.export_folder
-    del bpy.types.Scene.split_collection
-    del bpy.types.Scene.entrances_collection
-    del bpy.types.Scene.export_csv_path
-    del bpy.types.Scene.my_objects
-    del bpy.types.Scene.my_objects_index
-    del bpy.types.Scene.procesar_coleccion_props
-    del bpy.types.Scene.actualizar_fbx_props
+    props = (
+        "export_folder",
+        "create_road_help",
+        "split_collection",
+        "entrances_collection",
+        "export_csv_path",
+        "my_objects",
+        "my_objects_index",
+        "procesar_coleccion_props",
+        "actualizar_fbx_props",
+    )
 
-# Lista de clases
-classes = (
-    OBJECT_OT_rename_plates,
-    OBJECT_OT_import_fbx_to_collections,
-    OBJECT_OT_standard_settings,
-    OBJECT_OT_apply_fullbuilding_sys,
-    OBJECT_OT_apply_activecollection_sys,
-    OBJECT_OT_update_fullbuilding_sys_inputs,
-    OBJECT_OT_blocking_settings,
-    VIEW3D_PT_map_setting_tools,
-    VIEW3D_PT_building__tools,
-    VIEW3D_PT_set_dressing_tools,
-    VIEW3D_PT_export_tools,
-    VIEW3D_PT_collection_list_tools,
-    OBJECT_OT_clean_setdressing_collections,
-    OBJECT_OT_clean_building_collections,
-    OBJECT_OT_export_fbx,
-    OBJECT_OT_clean_figma_curves,
-    OBJECT_UL_custom_list,
-    ObjectListItem,
-    OBJECT_OT_add_to_list,
-    OBJECT_OT_remove_from_list,
-    OBJECT_OT_move_item,
-    OBJECT_OT_apply_order,
-    OBJECT_OT_load_landmark_plates,
-    OBJECT_OT_load_multisnap,
-    OBJECT_OT_load_edge_distribution,
-    OBJECT_OT_load_area_distribution,
-    OBJECT_OT_PostsWithFlags,
-    OBJECT_OT_CleanNearest,
-    OBJECT_OT_RoadPaths,
-    OBJECT_OT_FlatBorders,
-    OBJECT_OT_generate_csv_report,
-    OBJECT_OT_buildings_export_fbx,
-    OBJECT_OT_procesar_desde_coleccion,
-    ProcesarDuplicadorProps,
-    OBJECT_OT_actualizar_coleccion_externa,      # NUEVO operador
-    ActualizarFBXProps,                          # NUEVO struct de propiedades
-    VIEW3D_PT_procesar_mallas,
-)
+    for p in props:
+        if hasattr(bpy.types.Scene, p):
+            try:
+                delattr(bpy.types.Scene, p)
+            except:
+                pass
 
-# Función extra del menú (opcional)
-def menu_func(self, context):
-    self.layout.operator(OBJECT_OT_standard_settings.bl_idname, icon='PLUGIN')
-    self.layout.operator(OBJECT_OT_rename_plates.bl_idname, icon='PLUGIN')
-    self.layout.operator(OBJECT_OT_update_fullbuilding_sys_inputs.bl_idname, icon='PLUGIN')
-    self.layout.operator(OBJECT_OT_blocking_settings.bl_idname, icon='PLUGIN')
 
+# -------------------------------------------------------------------------
+# Construir lista global de clases desde cada módulo
+# -------------------------------------------------------------------------
+
+classes = []
+
+modules = [
+    import_fbx_to_collections,
+    rename_plates,
+    apply_fullbuilding_sys,
+    apply_activecollection_sys,
+    update_fullbuilding_sys_inputs,
+    standard_settings,
+    blocking_settings,
+    clean_setdressing_collections,
+    clean_building_collections,
+    export_fbx,
+    clean_figma_curves,
+    export_buildings_fbx,
+    generate_csv_report,
+    load_geometry_nodes,
+    object_order_tools,
+    procesar_mallas,
+    actualizar_coleccion_externa,
+    menu,
+]
+
+for m in modules:
+    if hasattr(m, "classes"):
+        classes.extend(m.classes)
+
+
+# -------------------------------------------------------------------------
 # Registro principal
+# -------------------------------------------------------------------------
+
 def register():
+    # Primero PropertyGroups / UILIsts
     for cls in classes:
         bpy.utils.register_class(cls)
+
     register_properties()
-    bpy.types.VIEW3D_MT_mesh_add.append(menu_func)
+
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
     unregister_properties()
-    bpy.types.VIEW3D_MT_mesh_add.remove(menu_func)
+
+    for cls in reversed(classes):
+        try:
+            bpy.utils.unregister_class(cls)
+        except:
+            pass
+
 
 if __name__ == "__main__":
     register()

@@ -1,7 +1,9 @@
 import bpy
 
+# ===============================
+# UI List y Property Group
+# ===============================
 class OBJECT_UL_custom_list(bpy.types.UIList):
-    """UI List to manually add and reorder objects"""
     bl_idname = "OBJECT_UL_custom_list"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
@@ -9,29 +11,32 @@ class OBJECT_UL_custom_list(bpy.types.UIList):
         if obj:
             layout.prop(obj, "name", text="", emboss=False, icon='OBJECT_DATAMODE')
 
+
 class ObjectListItem(bpy.types.PropertyGroup):
     object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
 
+
+# ===============================
+# Operadores
+# ===============================
 class OBJECT_OT_add_to_list(bpy.types.Operator):
-    """Add selected object to the list"""
     bl_idname = "object.add_to_list"
-    bl_label = "Add Selected Object to List"
+    bl_label = "Add Selected Object"
     
     def execute(self, context):
         obj = context.view_layer.objects.active
         if not obj:
             self.report({'ERROR'}, "No active object selected")
             return {'CANCELLED'}
-        
         item = context.scene.my_objects.add()
         item.object_ref = obj
-
+        context.scene.my_objects_index = len(context.scene.my_objects) - 1
         return {'FINISHED'}
 
+
 class OBJECT_OT_remove_from_list(bpy.types.Operator):
-    """Remove selected object from the list"""
     bl_idname = "object.remove_from_list"
-    bl_label = "Remove Object from List"
+    bl_label = "Remove Selected Object"
     
     @classmethod
     def poll(cls, context):
@@ -43,10 +48,10 @@ class OBJECT_OT_remove_from_list(bpy.types.Operator):
         context.scene.my_objects_index = min(max(0, index - 1), len(context.scene.my_objects) - 1)
         return {'FINISHED'}
 
+
 class OBJECT_OT_move_item(bpy.types.Operator):
-    """Move an item in the list"""
     bl_idname = "object.move_item"
-    bl_label = "Move an item in the list"
+    bl_label = "Move Object"
     
     direction: bpy.props.EnumProperty(items=[('UP', 'Up', ''), ('DOWN', 'Down', '')])
 
@@ -64,48 +69,93 @@ class OBJECT_OT_move_item(bpy.types.Operator):
             context.scene.my_objects_index += 1
         return {'FINISHED'}
 
+
 class OBJECT_OT_apply_order(bpy.types.Operator):
-    """Apply the order, duplicate, and rename objects in a new collection"""
     bl_idname = "object.apply_order"
-    bl_label = "Apply Order, Duplicate, and Rename in New Collection"
+    bl_label = "Apply Order & Duplicate"
     
     def execute(self, context):
-        # Crear una nueva colección
+        objects_in_order = context.scene.my_objects
+        if not objects_in_order:
+            self.report({'WARNING'}, "No objects in list")
+            return {'CANCELLED'}
+
         new_collection = bpy.data.collections.new("Duplicated_Objects")
         context.scene.collection.children.link(new_collection)
-        
-        objects_in_order = context.scene.my_objects
 
         for i, item in enumerate(objects_in_order):
             obj = item.object_ref
-            
-            # Crear una copia del objeto
+            if not obj:
+                continue
             obj_copy = obj.copy()
             obj_copy.data = obj.data.copy() if obj.data else None
             new_collection.objects.link(obj_copy)
-            
-            # Renombrar el objeto basado en el orden
-            new_name = f"{i:02d}.{obj.name}"
-            obj_copy.name = new_name
-        
+            obj_copy.name = f"{i:02d}.{obj.name}"
+
+        self.report({'INFO'}, "Objects duplicated and renamed in 'Duplicated_Objects'")
         return {'FINISHED'}
 
+
+# ===============================
+# Panel
+# ===============================
+class OBJECT_PT_custom_list_panel(bpy.types.Panel):
+    bl_label = "Object Order Manager"
+    bl_idname = "OBJECT_PT_custom_list_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Tools"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        # UI List
+        row = layout.row()
+        row.template_list(
+            "OBJECT_UL_custom_list", "", 
+            scene, "my_objects", 
+            scene, "my_objects_index",
+            rows=5
+        )
+
+        # Botones
+        col = layout.column(align=True)
+        col.operator("object.add_to_list", text="Add Selected")
+        col.operator("object.remove_from_list", text="Remove Selected")
+        
+        row = layout.row(align=True)
+        row.operator("object.move_item", text="Move Up").direction = 'UP'
+        row.operator("object.move_item", text="Move Down").direction = 'DOWN'
+
+        layout.separator()
+        layout.operator("object.apply_order", text="Apply Order & Duplicate", icon='OUTLINER_OB_COLLECTION')
+
+
+# ===============================
+# Registro
+# ===============================
+classes = [
+    OBJECT_UL_custom_list,
+    ObjectListItem,
+    OBJECT_OT_add_to_list,
+    OBJECT_OT_remove_from_list,
+    OBJECT_OT_move_item,
+    OBJECT_OT_apply_order,
+    OBJECT_PT_custom_list_panel
+]
+
 def register():
-    bpy.utils.register_class(OBJECT_UL_custom_list)
-    bpy.utils.register_class(ObjectListItem)
-    bpy.utils.register_class(OBJECT_OT_add_to_list)
-    bpy.utils.register_class(OBJECT_OT_remove_from_list)
-    bpy.utils.register_class(OBJECT_OT_move_item)
-    bpy.utils.register_class(OBJECT_OT_apply_order)
+    for cls in classes:
+        bpy.utils.register_class(cls)
     bpy.types.Scene.my_objects = bpy.props.CollectionProperty(type=ObjectListItem)
-    bpy.types.Scene.my_objects_index = bpy.props.IntProperty()
+    bpy.types.Scene.my_objects_index = bpy.props.IntProperty(default=0)
 
 def unregister():
-    bpy.utils.unregister_class(OBJECT_UL_custom_list)
-    bpy.utils.unregister_class(ObjectListItem)
-    bpy.utils.unregister_class(OBJECT_OT_add_to_list)
-    bpy.utils.unregister_class(OBJECT_OT_remove_from_list)
-    bpy.utils.unregister_class(OBJECT_OT_move_item)
-    bpy.utils.unregister_class(OBJECT_OT_apply_order)
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
     del bpy.types.Scene.my_objects
     del bpy.types.Scene.my_objects_index
+
+if __name__ == "__main__":
+    register()

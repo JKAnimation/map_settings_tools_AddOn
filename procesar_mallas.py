@@ -1,11 +1,17 @@
 import bpy
 import re
 
+# ---------------------------
+# PROPERTY GROUP
+# ---------------------------
 class ProcesarDuplicadorProps(bpy.types.PropertyGroup):
     coleccion_target: bpy.props.StringProperty(name="Colección Target")
     usar_mesh_activa: bpy.props.BoolProperty(name="Usar Mesh Activa", default=True)
 
 
+# ---------------------------
+# FUNCIONES AUXILIARES
+# ---------------------------
 def procesar_con_malla_base(obj_malla, coleccion_origen, nombre_export):
     coleccion_origen.name = nombre_export + ".001"
 
@@ -71,6 +77,9 @@ def obtener_meshes_recursivamente(coleccion):
     return objetos_mesh
 
 
+# ---------------------------
+# OPERADOR PRINCIPAL
+# ---------------------------
 class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
     bl_idname = "object.procesar_desde_coleccion"
     bl_label = "Procesar Mesh o Colección"
@@ -122,3 +131,12 @@ class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
 
         self.report({'INFO'}, "🎉 Proceso completado.")
         return {'FINISHED'}
+
+
+# ---------------------------
+# NUEVO: lista de clases exportadas por este módulo
+# ---------------------------
+classes = (
+    ProcesarDuplicadorProps,
+    OBJECT_OT_procesar_desde_coleccion,
+)

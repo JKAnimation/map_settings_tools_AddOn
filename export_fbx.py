@@ -70,3 +70,11 @@ class OBJECT_OT_export_fbx(bpy.types.Operator):
 
         self.report({'INFO'}, "Exportación completada")
         return {'FINISHED'}
+
+
+# ------------------------------------------------------------
+# NUEVO: lista de clases que exporta este módulo
+# ------------------------------------------------------------
+classes = (
+    OBJECT_OT_export_fbx,
+)
