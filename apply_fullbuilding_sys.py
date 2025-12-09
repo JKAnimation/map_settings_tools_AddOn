@@ -2,190 +2,241 @@ import bpy
 from mathutils import Vector
 import re
 
+# =========================================================
+#               OPERATOR PRINCIPAL
+# =========================================================
+
 class OBJECT_OT_apply_fullbuilding_sys(bpy.types.Operator):
     bl_idname = "object.apply_fullbuilding_sys"
     bl_label = "Apply FullBuilding Sys"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Convierte instancias en objetos reales y los organiza en colecciones"
+    bl_description = (
+        "Convierte instancias en objetos reales, actualiza nombres, "
+        "hace matching por volumen, aplica geometry nodes, y genera "
+        "Plates y Letters."
+    )
 
     @classmethod
     def poll(cls, context):
-        collection_names = ["Buildings_Exp", "Facades_Exp", "Letters_Exp", "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"]
+        collection_names = [
+            "Buildings_Exp",
+            "Facades_Exp",
+            "Letters_Exp",
+            "Plates_Exp",
+            "Bases_Exp",
+            "Stairs_Exp",
+            "Numbers_Exp"
+        ]
+
         for name in collection_names:
-            collection = bpy.data.collections.get(name)
-            if collection and len(collection.objects) == 0:
+            col = bpy.data.collections.get(name)
+            if col and len(col.objects) == 0:
                 return True
         return False
 
     def execute(self, context):
         organize_objects()
         context.view_layer.update()
+
         detect_walls_inside_buildings()
         context.view_layer.update()
+
         process_facades()
         context.view_layer.update()
-        self.report({'INFO'}, "Sistema aplicado exitosamente.")
+
+        self.report({'INFO'}, "Sistema FullBuilding aplicado exitosamente.")
         return {'FINISHED'}
 
-# Funciones auxiliares
 
-def make_collection_instances_real(collection):
-    """Convierte las instancias de una colección en objetos reales y elimina los originales."""
-    if not collection or not collection.objects:
-        print(f"[make_collection_instances_real] ❌ La colección '{collection.name}' está vacía o no existe.")
-        return []
-
-    # Guardar los objetos originales antes de hacer reales
-    original_names = {obj.name for obj in collection.objects}
-
-    # Des-seleccionar todo
-    bpy.ops.object.select_all(action='DESELECT')
-
-    # Seleccionar y activar uno de los objetos originales
-    for obj in collection.objects:
-        obj.select_set(True)
-
-    bpy.context.view_layer.objects.active = collection.objects[0]
-
-    # Hacer instancias reales
-    bpy.ops.object.duplicates_make_real()
-
-    # Identificar los nuevos objetos reales (los que antes no estaban en la colección)
-    new_objects = [obj for obj in bpy.context.selected_objects if obj.name not in original_names]
-
-    # Mover nuevos objetos a la misma colección, por si acaso
-    move_objects_to_collection(new_objects, collection)
-
-    # Eliminar los objetos originales
-    for name in original_names:
-        obj = bpy.data.objects.get(name)
-        if obj:
-            bpy.data.objects.remove(obj, do_unlink=True)
-
-    print(f"[make_collection_instances_real] ✅ {len(new_objects)} objetos creados y originales eliminados en '{collection.name}'")
-    return new_objects
-
-
-def expand_volume(container, expansion):
-    bbox_corners = [Vector(container.matrix_world @ Vector(corner)) for corner in container.bound_box]
-    min_corner = Vector([min(corner[i] for corner in bbox_corners) for i in range(3)])
-    max_corner = Vector([max(corner[i] for corner in bbox_corners) for i in range(3)])
-    return min_corner - expansion, max_corner + expansion
-
-def is_point_inside_volume(container, point, expansion=Vector((0.1, 0.1, 0.1))):
-    expanded_min, expanded_max = expand_volume(container, expansion)
-    return all(expanded_min[i] <= point[i] <= expanded_max[i] for i in range(3))
+# =========================================================
+#            FUNCIONES AUXILIARES GENERALES
+# =========================================================
 
 def clean_name(name):
     return re.sub(r'\.\d+$', '', name)
 
-def update_object_data(obj, new_name):
-    """Actualiza la data compartida del objeto asegurando que use la correcta."""
-    new_name = clean_name(new_name)
-    if obj.data:
-        new_data_name = new_name.replace("P_","S_") +"_Coll"
-        
-        # Verificar si la nueva data ya existe
-        existing_data = bpy.data.meshes.get(new_data_name)
-        if existing_data:
-            obj.data = existing_data  # Usar la data existente
-        else:
-            # Crear una nueva copia de la data actual con el nuevo nombre
-            obj.data = obj.data.copy()
-            obj.data.name = new_data_name
 
-def force_refresh_objects(objects, delta=0.001):
+def update_object_data(obj, new_name):
+    """
+    Cambia la data del objeto a una copia única con el nombre adecuado.
+    """
+    new_name = clean_name(new_name)
+    if not obj.data:
+        return
+
+    new_data_name = new_name.replace("P_", "S_") + "_Coll"
+
+    existing = bpy.data.meshes.get(new_data_name)
+    if existing:
+        obj.data = existing
+    else:
+        obj.data = obj.data.copy()
+        obj.data.name = new_data_name
+
+
+def expand_volume(container, expansion):
+    bbox = [container.matrix_world @ Vector(corner) for corner in container.bound_box]
+    min_corner = Vector([min(v[i] for v in bbox) for i in range(3)])
+    max_corner = Vector([max(v[i] for v in bbox) for i in range(3)])
+    return min_corner - expansion, max_corner + expansion
+
+
+def is_point_inside_volume(container, point, expansion=Vector((0.1, 0.1, 0.1))):
+    mn, mx = expand_volume(container, expansion)
+    return all(mn[i] <= point[i] <= mx[i] for i in range(3))
+
+
+def force_refresh(objects, delta=0.001):
+    """
+    Soluciona problemas de actualización forzando cambios leves.
+    """
     for obj in objects:
-        original_loc = obj.location.copy()
+        old = obj.location.copy()
         obj.location.x += delta
         bpy.context.view_layer.update()
-        obj.location = original_loc
+        obj.location = old
         bpy.context.view_layer.update()
 
 
-# Paso 1: Organizar edificios y fachadas
+def move_objects_to_collection(objects, target_collection):
+    for obj in objects:
+        if target_collection not in obj.users_collection:
+            target_collection.objects.link(obj)
+
+        for col in list(obj.users_collection):
+            if col != target_collection:
+                col.objects.unlink(obj)
+
+
+def make_collection_instances_real(collection):
+    if not collection or not collection.objects:
+        print(f"[make_collection_instances_real] ❌ '{collection.name}' vacía o no existe.")
+        return []
+
+    original = {o.name for o in collection.objects}
+
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in collection.objects:
+        obj.select_set(True)
+
+    bpy.context.view_layer.objects.active = collection.objects[0]
+    bpy.ops.object.duplicates_make_real()
+
+    new_objects = [
+        o for o in bpy.context.selected_objects
+        if o.name not in original
+    ]
+
+    move_objects_to_collection(new_objects, collection)
+
+    for name in original:
+        obj = bpy.data.objects.get(name)
+        if obj:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    print(f"[make_collection_instances_real] {len(new_objects)} creados en '{collection.name}'")
+    return new_objects
+
+
+# =========================================================
+#               PASO 1 – ORGANIZAR OBJETOS
+# =========================================================
 
 def organize_objects():
-    collections = {
+    mapping = {
         "00_Buildings": "Buildings_Exp",
         "01_Facades": "Facades_Exp",
         "02_Numbers": "Numbers_Exp"
     }
-    master_collection = bpy.data.collections.get("Master")
-    if not master_collection:
+
+    master = bpy.data.collections.get("Master")
+    if not master:
+        print("No existe colección Master.")
         return
-    for obj in master_collection.objects:
-        if obj.name in collections:
+
+    for obj in master.objects:
+        if obj.name in mapping:
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
+
             bpy.ops.object.duplicates_make_real()
-            move_objects_to_collection(bpy.context.selected_objects, bpy.data.collections.get(collections[obj.name]))
 
-    print('Paso 01 finalizado')
+            dst = bpy.data.collections.get(mapping[obj.name])
+            move_objects_to_collection(bpy.context.selected_objects, dst)
+
+    print("Paso 01: Organización completada.")
 
 
-# Paso 2: Detectar y actualizar entradas
+# =========================================================
+#       PASO 2 – MATCH WALL/APT INSIDE BUILDINGS
+# =========================================================
 
 def detect_walls_inside_buildings():
-    buildings_collection = bpy.data.collections.get("Buildings_Exp")
-    facades_collection = bpy.data.collections.get("Facades_Exp")
-    
-    if not buildings_collection:
-        print("No se encontró la colección 'Buildings_Exp'.")
-        return
-    if not facades_collection:
-        print("No se encontró la colección 'Facades_Exp'.")
-        return
-    
-    buildings = [obj for obj in buildings_collection.objects if "_Building_" in obj.name]
-    walls = [obj for obj in facades_collection.objects if "_Wall_" in obj.name]
-    apts = [obj for obj in facades_collection.objects if "_APT_" in obj.name]
-    
-    for building in buildings:
-        building_number = building.name.split("_")[3]
-        for wall in walls:
-            if is_point_inside_volume(building, wall.location):
-                new_name = clean_name(wall.name.replace(wall.name.split("_")[3], building_number))
-                wall.name = new_name
-                update_object_data(wall, new_name)
-        for apt in apts:
-            if is_point_inside_volume(building, apt.location):
-                new_name = clean_name(apt.name.replace(apt.name.split("_")[4], building_number))
-                apt.name = new_name
-                update_object_data(apt, new_name)
-    
-    print('Paso 02 finalizado')
+    col_build = bpy.data.collections.get("Buildings_Exp")
+    col_facad = bpy.data.collections.get("Facades_Exp")
 
-# Paso 3: Aplicar nodo y hacer reales las instancias
+    if not col_build or not col_facad:
+        print("Faltan colecciones para matching.")
+        return
+
+    buildings = [o for o in col_build.objects if "_Building_" in o.name]
+    walls = [o for o in col_facad.objects if "_Wall_" in o.name]
+    apts = [o for o in col_facad.objects if "_APT_" in o.name]
+
+    for b in buildings:
+        num = b.name.split("_")[3]
+
+        for w in walls:
+            if is_point_inside_volume(b, w.location):
+                new = clean_name(w.name.replace(w.name.split("_")[3], num))
+                w.name = new
+                update_object_data(w, new)
+
+        for a in apts:
+            if is_point_inside_volume(b, a.location):
+                new = clean_name(a.name.replace(a.name.split("_")[4], num))
+                a.name = new
+                update_object_data(a, new)
+
+    print("Paso 02: Walls/APT actualizados.")
+
+
+# =========================================================
+#           PASO 3 – GENERAR PLATES Y LETTERS
+# =========================================================
 
 def process_facades():
-    facades_collection = bpy.data.collections.get("Facades_Exp")
-    plates_collection = bpy.data.collections.get("Plates_Exp")
-    letters_collection = bpy.data.collections.get("Letters_Exp")
-    if not facades_collection or not plates_collection or not letters_collection:
+    col_f = bpy.data.collections.get("Facades_Exp")
+    col_p = bpy.data.collections.get("Plates_Exp")
+    col_l = bpy.data.collections.get("Letters_Exp")
+
+    if not col_f or not col_p or not col_l:
+        print("Faltan colecciones para Plates y Letters.")
         return
 
-    # Asignar el nodo a las fachadas si no lo tienen
-    for obj in facades_collection.objects:
+    # Aplicar nodo si falta
+    for obj in col_f.objects:
         if "Facades_Plates" not in obj.modifiers:
-            mod = obj.modifiers.new(name="Facades_Plates", type='NODES')
-            mod.node_group = bpy.data.node_groups.get("Facades_Plates")
+            m = obj.modifiers.new(name="Facades_Plates", type='NODES')
+            m.node_group = bpy.data.node_groups.get("Facades_Plates")
 
-    bpy.context.view_layer.update()
-    force_refresh_objects(facades_collection.objects)
+    force_refresh(col_f.objects)
+    print("Nodo aplicado en Facades.")
 
-    print('Nodo asignado y actualizado en facades')
+    # ---------------------------------------------------------
+    # DUPLICAR PARA PLATES
+    # ---------------------------------------------------------
+    duplicates_p = []
 
-    # Duplicar objetos para Plates (con misma data y modificadores)
-    duplicated_plates = []
-    for obj in facades_collection.objects:
+    for obj in col_f.objects:
         obj.modifiers["Facades_Plates"]["Socket_2"] = 1
 
         dup = bpy.data.objects.new(obj.name + "_plate", obj.data)
         dup.location = obj.location.copy()
         dup.rotation_euler = obj.rotation_euler.copy()
         dup.scale = obj.scale.copy()
+
         for mod in obj.modifiers:
             if mod.type == 'NODES' and mod.name == "Facades_Plates":
                 new_mod = dup.modifiers.new(name=mod.name, type='NODES')
@@ -193,21 +244,26 @@ def process_facades():
                 for key in mod.keys():
                     if key.startswith("Socket_"):
                         new_mod[key] = mod[key]
-        duplicated_plates.append(dup)
 
-    move_objects_to_collection(duplicated_plates, plates_collection)
-    force_refresh_objects(facades_collection.objects)
-    make_collection_instances_real(plates_collection)
+        duplicates_p.append(dup)
 
-    # Duplicar objetos para Letters (con misma data)
-    duplicated_letters = []
-    for obj in facades_collection.objects:
+    move_objects_to_collection(duplicates_p, col_p)
+    force_refresh(col_f.objects)
+    make_collection_instances_real(col_p)
+
+    # ---------------------------------------------------------
+    # DUPLICAR PARA LETTERS
+    # ---------------------------------------------------------
+    duplicates_l = []
+
+    for obj in col_f.objects:
         obj.modifiers["Facades_Plates"]["Socket_2"] = 2
 
         dup = bpy.data.objects.new(obj.name + "_letter", obj.data)
         dup.location = obj.location.copy()
         dup.rotation_euler = obj.rotation_euler.copy()
         dup.scale = obj.scale.copy()
+
         for mod in obj.modifiers:
             if mod.type == 'NODES' and mod.name == "Facades_Plates":
                 new_mod = dup.modifiers.new(name=mod.name, type='NODES')
@@ -215,41 +271,17 @@ def process_facades():
                 for key in mod.keys():
                     if key.startswith("Socket_"):
                         new_mod[key] = mod[key]
-        duplicated_letters.append(dup)
 
-    move_objects_to_collection(duplicated_letters, letters_collection)
-    force_refresh_objects(facades_collection.objects)
-    make_collection_instances_real(letters_collection)
+        duplicates_l.append(dup)
 
-    # Restaurar modificador en las originales
-    for obj in facades_collection.objects:
+    move_objects_to_collection(duplicates_l, col_l)
+    force_refresh(col_f.objects)
+    make_collection_instances_real(col_l)
+
+    # Restaurar el nodo original (Socket_2 = 0)
+    for obj in col_f.objects:
         obj.modifiers["Facades_Plates"]["Socket_2"] = 0
-    bpy.context.view_layer.update()
-    force_refresh_objects(facades_collection.objects)
-    print('Facades actualizados')
 
+    force_refresh(col_f.objects)
+    print("Paso 03: Plates y Letters generados.")
 
-
-
-def move_objects_to_collection(objects, target_collection):
-    for obj in objects:
-        # Asegurar que esté enlazado a la colección destino
-        if target_collection not in obj.users_collection:
-            target_collection.objects.link(obj)
-        # Eliminarlo de otras colecciones si es necesario
-        for col in obj.users_collection:
-            if col != target_collection:
-                col.objects.unlink(obj)
-
-
-
-
-
-def register():
-    bpy.utils.register_class(OBJECT_OT_apply_fullbuilding_sys)
-
-def unregister():
-    bpy.utils.unregister_class(OBJECT_OT_apply_fullbuilding_sys)
-
-if __name__ == "__main__":
-    register()

@@ -7,69 +7,120 @@ import shutil
 from bpy.types import Operator, PropertyGroup
 from bpy.props import StringProperty
 
+
+# ---------------------------------------------------------------------------
+# PROPIEDADES
+# ---------------------------------------------------------------------------
+
 class ActualizarFBXProps(PropertyGroup):
-    ruta_blend: StringProperty(name="Archivo fuente (.blend)", subtype='FILE_PATH')
-    nombre_coleccion: StringProperty(name="Nombre de la colección")
+    ruta_blend: StringProperty(
+        name="Archivo fuente (.blend)",
+        subtype='FILE_PATH'
+    )
+    nombre_coleccion: StringProperty(
+        name="Nombre de la colección"
+    )
+
+
+# ---------------------------------------------------------------------------
+# OPERADOR PRINCIPAL
+# ---------------------------------------------------------------------------
 
 class OBJECT_OT_actualizar_coleccion_externa(Operator):
     bl_idname = "object.actualizar_coleccion_externa"
     bl_label = "Actualizar colección externa"
-    bl_description = "Actualiza una colección desde un archivo fuente .blend en su archivo destino bloqueado"
+    bl_description = "Exporta desde el archivo fuente y actualiza la colección en el archivo Blocking correspondiente"
 
     @classmethod
     def poll(cls, context):
-        return True  # Se permite siempre ejecutar, sin depender de bpy.data.libraries
+        return True
 
     def execute(self, context):
+
         props = context.scene.actualizar_fbx_props
         ruta_blend = bpy.path.abspath(props.ruta_blend)
         coleccion_nombre = props.nombre_coleccion
 
+        # -------------------------------------------------------------------
+        # VALIDACIÓN DEL ARCHIVO FUENTE
+        # -------------------------------------------------------------------
         if not os.path.exists(ruta_blend):
-            self.report({'ERROR'}, "Archivo source no encontrado.")
+            self.report({'ERROR'}, "Archivo fuente (.blend) no encontrado.")
             return {'CANCELLED'}
 
-        # Obtener archivo actual
+        # -------------------------------------------------------------------
+        # ARCHIVO ACTUAL (EL CUTTER)
+        # -------------------------------------------------------------------
         archivo_actual = bpy.path.abspath(bpy.data.filepath)
         nombre_archivo = os.path.basename(archivo_actual)
+        carpeta_actual = os.path.dirname(archivo_actual)
 
-        if not nombre_archivo.endswith("_Cutter.blend"):
-            self.report({'ERROR'}, "El archivo actual no termina en '_Cutter.blend'")
+        if "_Cutter.blend" not in nombre_archivo:
+            self.report({'ERROR'}, "El archivo actual no termina en '_Cutter.blend'.")
             return {'CANCELLED'}
 
-        # Generar ruta del archivo destino cambiando sufijo y carpeta
+        # -------------------------------------------------------------------
+        # CREAR EL ARCHIVO DESTINO AUTOMÁTICAMENTE
+        # -------------------------------------------------------------------
+
+        # 1. Nombre del archivo destino
         nombre_destino = nombre_archivo.replace("_Cutter.blend", "_Blocking_FBX.blend")
-        carpeta_destino = r"I:\Unidades compartidas\EDITABLES ALPHAVERSE\FANZONES\16 Blocking_FBX"
+
+        # 2. Carpeta destino (reemplazar Cutter → Blocking)
+        if "Cutter" not in carpeta_actual:
+            self.report({'ERROR'}, "La carpeta actual no contiene 'Cutter', no se puede deducir la ruta destino.")
+            return {'CANCELLED'}
+
+        carpeta_destino = carpeta_actual.replace("Cutter", "Blocking")
+
+        # 3. Ruta final
         target_blend = os.path.join(carpeta_destino, nombre_destino)
 
         if not os.path.exists(target_blend):
-            self.report({'ERROR'}, f"El archivo destino no existe:\n{target_blend}")
+            self.report({'ERROR'}, f"No existe el archivo destino:\n{target_blend}")
             return {'CANCELLED'}
 
-        # Procedimiento original
+        # -------------------------------------------------------------------
+        # DIRECTORIO TEMPORAL Y RUTAS
+        # -------------------------------------------------------------------
         temp_dir = tempfile.mkdtemp()
         fbx_path = os.path.join(temp_dir, "temp_export.fbx")
         blender_path = bpy.app.binary_path
 
-        # Script para exportar FBX desde el archivo origen
+        # -------------------------------------------------------------------
+        # SCRIPT: EXPORTAR FBX DESDE EL ARCHIVO FUENTE
+        # -------------------------------------------------------------------
+
         export_script = os.path.join(temp_dir, "export_script.py")
         with open(export_script, "w") as f:
             f.write(f"""
 import bpy
 import sys
+
 coleccion = bpy.data.collections.get('{coleccion_nombre}')
 if not coleccion:
     print('ERROR: colección no encontrada')
     sys.exit(1)
+
 for obj in bpy.data.objects:
     obj.select_set(False)
+
 for obj in coleccion.objects:
     obj.select_set(True)
+
 if coleccion.objects:
     bpy.context.view_layer.objects.active = coleccion.objects[0]
-    bpy.ops.export_scene.fbx(filepath=r'{fbx_path}', use_selection=True, apply_unit_scale=True,
-        apply_scale_options='FBX_SCALE_NONE', bake_space_transform=True,
-        object_types={{'MESH'}}, path_mode='AUTO', axis_forward='-Z', axis_up='Y')
+    bpy.ops.export_scene.fbx(
+        filepath=r'{fbx_path}',
+        use_selection=True,
+        apply_unit_scale=True,
+        apply_scale_options='FBX_SCALE_NONE',
+        bake_space_transform=True,
+        object_types={{'MESH'}},
+        path_mode='AUTO',
+        axis_forward='-Z',
+        axis_up='Y'
+    )
 else:
     print('ERROR: colección vacía')
     sys.exit(1)
@@ -78,50 +129,47 @@ else:
         subprocess.run([blender_path, ruta_blend, "--background", "--python", export_script])
 
         if not os.path.exists(fbx_path):
-            self.report({'ERROR'}, "No se generó el archivo FBX.")
+            self.report({'ERROR'}, "No se generó el archivo FBX al exportar desde el archivo fuente.")
             shutil.rmtree(temp_dir)
             return {'CANCELLED'}
 
-        # Script para importar el FBX en el archivo destino
+        # -------------------------------------------------------------------
+        # SCRIPT: IMPORTAR FBX EN EL ARCHIVO DESTINO
+        # -------------------------------------------------------------------
+
         import_script = os.path.join(temp_dir, "import_script.py")
         with open(import_script, "w") as f:
             f.write(f"""
 import bpy
 import sys
+
 fbx_path = r'{fbx_path}'
 coleccion_nombre = '{coleccion_nombre}'
 coleccion_padre = 'Blocking'
 
-# Eliminar la colección existente si ya está
+# Si existe la colección, eliminarla completamente
 if coleccion_nombre in bpy.data.collections:
     col = bpy.data.collections[coleccion_nombre]
     for obj in list(col.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.collections.remove(col)
 
-# Limpiar data huérfana
-for mesh in bpy.data.meshes:
-    if not mesh.users:
-        bpy.data.meshes.remove(mesh)
-for mat in bpy.data.materials:
-    if not mat.users:
-        bpy.data.materials.remove(mat)
-
-bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
-
-# Importar el FBX
+# Importar FBX
 bpy.ops.import_scene.fbx(filepath=fbx_path)
 
-# Crear la colección destino
+# Crear colección nueva
 new_col = bpy.data.collections.new(coleccion_nombre)
+
+# Obtener o crear colección padre
 if coleccion_padre in bpy.data.collections:
     parent_col = bpy.data.collections[coleccion_padre]
 else:
     parent_col = bpy.data.collections.new(coleccion_padre)
     bpy.context.scene.collection.children.link(parent_col)
+
 parent_col.children.link(new_col)
 
-# Mover los objetos importados
+# Mover objetos importados a la colección
 for obj in bpy.context.selected_objects:
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     for c in obj.users_collection:
@@ -134,5 +182,6 @@ bpy.ops.wm.save_mainfile()
         subprocess.run([blender_path, target_blend, "--background", "--python", import_script])
 
         shutil.rmtree(temp_dir)
-        self.report({'INFO'}, f"Colección '{coleccion_nombre}' exportada a archivo:\n{target_blend}")
+
+        self.report({'INFO'}, f"Colección '{coleccion_nombre}' actualizada correctamente:\n{target_blend}")
         return {'FINISHED'}
