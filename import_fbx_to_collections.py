@@ -53,11 +53,3 @@ class OBJECT_OT_import_fbx_to_collections(bpy.types.Operator):
             imported_objects.extend(current_import)
 
         return {'FINISHED'}
-    
-    # ------------------------------------------------------------
-# NUEVO: lista de clases que exporta este módulo
-# ------------------------------------------------------------
-classes = (
-    OBJECT_OT_import_fbx_to_collections,
-)
-

@@ -134,11 +134,3 @@ class OBJECT_OT_generate_csv_report(bpy.types.Operator):
 
         self.report({'INFO'}, f"Archivo CSV generado: {csv_filepath}")
         return {'FINISHED'}
-    
-    # ------------------------------------------------------------
-# NUEVO: lista de clases que exporta este módulo
-# ------------------------------------------------------------
-classes = (
-    OBJECT_OT_generate_csv_report,
-)
-

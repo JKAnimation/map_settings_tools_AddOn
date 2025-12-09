@@ -6,6 +6,7 @@ class OBJECT_OT_update_fullbuilding_sys_inputs(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     bl_description= "Actualiza los valores de todos los FullBuildingSys, según el objeto seleccionado"
 
+
     @classmethod
     def poll(cls, context):
         # Verifica si hay un objeto activo
@@ -22,6 +23,7 @@ class OBJECT_OT_update_fullbuilding_sys_inputs(bpy.types.Operator):
                 return True
         
         return False
+
 
     def execute(self, context):
         selected_obj = context.object
@@ -41,6 +43,7 @@ class OBJECT_OT_update_fullbuilding_sys_inputs(bpy.types.Operator):
             "Socket_18": selected_obj.modifiers["FullBuildings_Sys"].get("Socket_18"),
             "Socket_19": selected_obj.modifiers["FullBuildings_Sys"].get("Socket_19"),
             "Socket_20": selected_obj.modifiers["FullBuildings_Sys"].get("Socket_20")
+            
         }
         
         # Actualizar los inputs en otros objetos que tienen el mismo modificador
@@ -60,9 +63,11 @@ class OBJECT_OT_update_fullbuilding_sys_inputs(bpy.types.Operator):
         self.report({'INFO'}, "Inputs actualizados correctamente.")
         return {'FINISHED'}
 
-# ------------------------------------------------------------
-# Lista de clases exportadas por este módulo
-# ------------------------------------------------------------
-classes = (
-    OBJECT_OT_update_fullbuilding_sys_inputs,
-)
+def register():
+    bpy.utils.register_class(OBJECT_OT_update_fullbuilding_sys_inputs)
+
+def unregister():
+    bpy.utils.unregister_class(OBJECT_OT_update_fullbuilding_sys_inputs)
+
+if __name__ == "__main__":
+    register()

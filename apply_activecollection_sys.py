@@ -4,81 +4,96 @@ class OBJECT_OT_apply_activecollection_sys(bpy.types.Operator):
     bl_idname = "object.apply_activecollection_sys"
     bl_label = "Split C-C"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Convierte instancias en objetos reales de la colección activa en la colección destino"
+    bl_description = "Convierte instancias en objetos reales de la colección activa en la colección objetivo"
 
     @classmethod
     def poll(cls, context):
-        col = context.view_layer.active_layer_collection.collection
-        return col and len(col.objects) > 0
+        # Verificar si la colección activa tiene objetos
+        return context.view_layer.active_layer_collection.collection.objects
 
     def execute(self, context):
+        # Desactivar el modificador "Realize Instances"
         disable_realize_modifiers()
 
+        # Nombre de la colección donde se guardarán las instancias reales
         exp_collection_name = context.scene.split_collection.name
 
+        # Crear o encontrar la colección "SetDressing_Exp"
         if exp_collection_name not in bpy.data.collections:
             exp_collection = bpy.data.collections.new(exp_collection_name)
-            context.scene.collection.children.link(exp_collection)
+            bpy.context.scene.collection.children.link(exp_collection)
         else:
             exp_collection = bpy.data.collections[exp_collection_name]
 
-        active_collection = context.view_layer.active_layer_collection.collection
+        # Obtener la colección activa
+        active_collection = bpy.context.view_layer.active_layer_collection.collection
 
-        for obj in list(active_collection.objects):
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            context.view_layer.objects.active = obj
+        # Iterar sobre los objetos en la colección activa
+        for obj in active_collection.objects:
+            # Seleccionar el objeto antes de hacer que las instancias sean reales
+            bpy.ops.object.select_all(action='DESELECT')  # Deseleccionar todo
+            obj.select_set(True)  # Seleccionar el objeto actual
+            bpy.context.view_layer.objects.active = obj  # Activar el objeto
 
-            before = set(bpy.data.objects)
+            # Hacer reales las instancias
+            bpy.ops.object.duplicates_make_real()
 
-            try:
-                bpy.ops.object.duplicates_make_real()
-            except Exception as e:
-                self.report({'WARNING'}, f"No se pudo hacer real {obj.name}: {e}")
-                continue
+            # Obtener los objetos generados (que estarán seleccionados)
+            generated_objects = bpy.context.selected_objects
 
-            after = set(bpy.data.objects)
-            new_objects = list(after - before)
+            # Mover solo los objetos generados a la colección "SetDressing_Exp"
+            for new_obj in generated_objects:
+                if new_obj.name.startswith("_")==False:
+                    exp_collection.objects.link(new_obj)  # Añadir el objeto generado a la colección "SetDressing_Exp"
+                    active_collection.objects.unlink(new_obj)  # Desvincular el objeto de la colección activa
+                    self.report({'INFO'}, f"Objeto {new_obj.name} movido a la colección {exp_collection_name}")
 
-            if not new_objects:
-                new_objects = [obj]
-
-            for new_obj in new_objects:
-                if new_obj.name.startswith("_"):
-                    continue
-                if exp_collection not in new_obj.users_collection:
-                    exp_collection.objects.link(new_obj)
-                for col in list(new_obj.users_collection):
-                    if col != exp_collection:
-                        col.objects.unlink(new_obj)
-
+            # Deseleccionar los objetos generados
             bpy.ops.object.select_all(action='DESELECT')
 
+        # Volver a activar el modificador "Realize Instances"
         enable_realize_modifiers()
 
-        self.report({'INFO'}, f"Instancias convertidas y movidas a '{exp_collection_name}'.")
+        self.report({'INFO'}, "Instancias convertidas y movidas a la colección 'SetDressing_Exp'.")
         return {'FINISHED'}
 
-
 def disable_realize_modifiers():
+    # Obtener la colección activa
     active_collection = bpy.context.view_layer.active_layer_collection.collection
-    for obj in active_collection.objects:
-        for mod in obj.modifiers:
-            if mod.type == "NODES" and mod.node_group and mod.node_group.name == "Realize":
-                mod.show_viewport = False
-    bpy.context.view_layer.update()
 
+    # Iterar sobre los objetos en la colección activa
+    for obj in active_collection.objects:
+        # Buscar el modificador "Realize Instances"
+        for mod in obj.modifiers:
+            if mod.type == 'NODES' and mod.node_group and mod.node_group.name == "Realize":
+                if mod.show_viewport:
+                    mod.show_viewport = False
+                print(f"Modificador 'Realize Instances' desactivado en {obj.name}")
+
+    # Actualizar la vista para reflejar los cambios
+    bpy.context.view_layer.update()
 
 def enable_realize_modifiers():
+    # Obtener la colección activa
     active_collection = bpy.context.view_layer.active_layer_collection.collection
+
+    # Iterar sobre los objetos en la colección activa
     for obj in active_collection.objects:
+        # Buscar el modificador "Realize Instances"
         for mod in obj.modifiers:
-            if mod.type == "NODES" and mod.node_group and mod.node_group.name == "Realize":
-                mod.show_viewport = True
+            if mod.type == 'NODES' and mod.node_group and mod.node_group.name == "Realize":
+                if not mod.show_viewport:
+                    mod.show_viewport = True
+                print(f"Modificador 'Realize Instances' activado en {obj.name}")
+
+    # Actualizar la vista para reflejar los cambios
     bpy.context.view_layer.update()
 
+def register():
+    bpy.utils.register_class(OBJECT_OT_apply_activecollection_sys)
 
-# --- REGISTRO UNIFICADO ---
-classes = (
-    OBJECT_OT_apply_activecollection_sys,
-)
+def unregister():
+    bpy.utils.unregister_class(OBJECT_OT_apply_activecollection_sys)
+
+if __name__ == "__main__":
+    register()

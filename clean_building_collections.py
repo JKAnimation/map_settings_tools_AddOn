@@ -4,52 +4,59 @@ class OBJECT_OT_clean_building_collections(bpy.types.Operator):
     bl_idname = "object.clean_building_collections"
     bl_label = "Clean Building Collections"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Elimina objetos en las colecciones de exportación y limpia datos huérfanos"
-
-    collection_names = [
-        "Buildings_Exp", "Facades_Exp", "Letters_Exp",
-        "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"
-    ]
+    bl_description = "Elimina todos los objetos en las colecciones para exportar y limpia los datos huérfanos"
 
     @classmethod
     def poll(cls, context):
-        return any(
-            (col := bpy.data.collections.get(name)) and len(col.objects) > 0
-            for name in cls.collection_names
-        )
+        # Verifica si hay objetos en al menos una de las colecciones especificadas
+        collection_names = ["Buildings_Exp", "Facades_Exp", "Letters_Exp", "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"]
+        for name in collection_names:
+            collection = bpy.data.collections.get(name)
+            if collection and len(collection.objects) > 0:
+                return True
+        return False
 
     def execute(self, context):
-        # Limpiar objetos en colecciones
-        for name in self.collection_names:
-            col = bpy.data.collections.get(name)
-            if col:
-                for obj in list(col.objects):
+        # Nombres de las colecciones a limpiar
+        collection_names = ["Buildings_Exp", "Facades_Exp", "Letters_Exp", "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"]
+
+        for name in collection_names:
+            collection = bpy.data.collections.get(name)
+            if collection is not None:
+                # Iterar sobre los objetos en la colección y eliminarlos
+                for obj in collection.objects:
                     bpy.data.objects.remove(obj, do_unlink=True)
-                self.report({'INFO'}, f"Objetos eliminados en {name}")
+                self.report({'INFO'}, f"Objetos eliminados en la colección {name}")
             else:
                 self.report({'WARNING'}, f"La colección {name} no existe")
 
-        # Limpiar datos huérfanos de forma segura
-        data_types = [
-            bpy.data.meshes, bpy.data.materials, bpy.data.textures,
-            bpy.data.lights, bpy.data.cameras, bpy.data.curves,
-            bpy.data.images, bpy.data.node_groups, bpy.data.particles,
-            bpy.data.speakers
-        ]
-
-        for data_collection in data_types:
-            for data_block in list(data_collection):
+        # Limpieza de datos huérfanos
+        # Buscar y eliminar datos no utilizados manualmente
+        def remove_unused_data(data_collection):
+            for data_block in data_collection:
                 if not data_block.users:
                     data_collection.remove(data_block)
 
-        self.report({'INFO'}, "Datos huérfanos eliminados correctamente")
+        # Limpiar los datos huérfanos en diferentes tipos de datos
+        remove_unused_data(bpy.data.meshes)
+        remove_unused_data(bpy.data.materials)
+        remove_unused_data(bpy.data.textures)
+        remove_unused_data(bpy.data.lights)
+        remove_unused_data(bpy.data.cameras)
+        remove_unused_data(bpy.data.curves)
+        remove_unused_data(bpy.data.images)
+        remove_unused_data(bpy.data.node_groups)
+        remove_unused_data(bpy.data.particles)
+        remove_unused_data(bpy.data.speakers)
+
+        self.report({'INFO'}, "Data limpia de objetos no utilizados.")
         return {'FINISHED'}
 
+def register():
+    bpy.utils.register_class(OBJECT_OT_clean_building_collections)
 
-# ------------------------------------------------------------------------
-#  NUEVO: lista de clases que exporta este módulo para __init__.py
-# ------------------------------------------------------------------------
+def unregister():
+    bpy.utils.unregister_class(OBJECT_OT_clean_building_collections)
 
-classes = (
-    OBJECT_OT_clean_building_collections,
-)
+if __name__ == "__main__":
+    register()

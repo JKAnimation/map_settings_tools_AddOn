@@ -263,10 +263,3 @@ class OBJECT_OT_rename_plates(bpy.types.Operator):
         except Exception as e:
             self.report({'ERROR'}, f"Se produjo un error: {str(e)}")
             return {'CANCELLED'}
-        
-# ------------------------------------------------------------
-# NUEVO: lista de clases exportadas por este módulo
-# ------------------------------------------------------------
-classes = (
-    OBJECT_OT_rename_plates,
-)
