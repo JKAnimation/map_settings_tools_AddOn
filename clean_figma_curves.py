@@ -65,7 +65,8 @@ def create_blocking():
         "R_Land": "Special",
         "R_Green": "Green",
         "R_River": "River",
-        "R_Street": "Street"
+        "R_Street": "Street",
+        "R_External":"External"
     }
     
     blocking_collection = bpy.data.collections.get("Blocking")
