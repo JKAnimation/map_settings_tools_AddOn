@@ -35,16 +35,6 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     def apply_modifiers_and_join_meshes(self, blend_file_path, create_road_help):
         self.report({'INFO'}, "Starting the script...")
 
-        if "Internal rounder" not in bpy.data.node_groups:
-            self.report({'INFO'}, "Loading Internal rounder node group...")
-            bpy.ops.wm.append(
-                filepath=os.path.join(blend_file_path, "NodeTree", "Internal rounder"),
-                directory=os.path.join(blend_file_path, "NodeTree"),
-                filename="Internal rounder"
-            )
-        else:
-            self.report({'INFO'}, "Internal rounder node group already loaded")
-
         if "Clean_Curves" not in bpy.data.node_groups:
             self.report({'INFO'}, "Loading Clean_Curves node group...")
             bpy.ops.wm.append(
@@ -91,7 +81,6 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             clean_curves_modifier.node_group.use_fake_user = True
             self.report({'INFO'}, f"Added Clean_Curves Geometry Nodes modifier to {mesh.name}")
     
-
             decimate_modifier = mesh.modifiers.new(name="Decimate", type='DECIMATE')
             decimate_modifier.decimate_type = 'DISSOLVE'
             decimate_modifier.angle_limit = 3 * (3.14159 / 180)
