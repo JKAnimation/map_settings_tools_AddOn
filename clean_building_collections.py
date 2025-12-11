@@ -9,7 +9,10 @@ class OBJECT_OT_clean_building_collections(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # Verifica si hay objetos en al menos una de las colecciones especificadas
-        collection_names = ["Buildings_Exp", "Facades_Exp", "Letters_Exp", "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"]
+        collection_names = [
+            "Buildings_Exp", "Facades_Exp", "Letters_Exp",
+            "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"
+        ]
         for name in collection_names:
             collection = bpy.data.collections.get(name)
             if collection and len(collection.objects) > 0:
@@ -18,26 +21,28 @@ class OBJECT_OT_clean_building_collections(bpy.types.Operator):
 
     def execute(self, context):
         # Nombres de las colecciones a limpiar
-        collection_names = ["Buildings_Exp", "Facades_Exp", "Letters_Exp", "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"]
+        collection_names = [
+            "Buildings_Exp", "Facades_Exp", "Letters_Exp",
+            "Plates_Exp", "Bases_Exp", "Stairs_Exp", "Numbers_Exp"
+        ]
 
         for name in collection_names:
             collection = bpy.data.collections.get(name)
             if collection is not None:
                 # Iterar sobre los objetos en la colección y eliminarlos
-                for obj in collection.objects:
+                for obj in list(collection.objects):
                     bpy.data.objects.remove(obj, do_unlink=True)
                 self.report({'INFO'}, f"Objetos eliminados en la colección {name}")
             else:
                 self.report({'WARNING'}, f"La colección {name} no existe")
 
         # Limpieza de datos huérfanos
-        # Buscar y eliminar datos no utilizados manualmente
         def remove_unused_data(data_collection):
-            for data_block in data_collection:
+            for data_block in list(data_collection):
                 if not data_block.users:
                     data_collection.remove(data_block)
 
-        # Limpiar los datos huérfanos en diferentes tipos de datos
+        # Limpiar los datos huérfanos
         remove_unused_data(bpy.data.meshes)
         remove_unused_data(bpy.data.materials)
         remove_unused_data(bpy.data.textures)
@@ -52,11 +57,11 @@ class OBJECT_OT_clean_building_collections(bpy.types.Operator):
         self.report({'INFO'}, "Data limpia de objetos no utilizados.")
         return {'FINISHED'}
 
-def register():
-    bpy.utils.register_class(OBJECT_OT_clean_building_collections)
 
-def unregister():
-    bpy.utils.unregister_class(OBJECT_OT_clean_building_collections)
+# ----------------------------------------------------------
+# 🔗 Clases a registrar desde __init__.py
+# ----------------------------------------------------------
 
-if __name__ == "__main__":
-    register()
+classes = (
+    OBJECT_OT_clean_building_collections,
+)
