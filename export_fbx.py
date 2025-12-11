@@ -6,14 +6,6 @@ class OBJECT_OT_export_fbx(bpy.types.Operator):
     bl_label = "Export FBX"
     bl_description = "Exporta FBX separando por colecciones usando la colección activa, solo si las mallas tienen vértices"
 
-    @classmethod
-    def poll(cls, context):
-        current_file_path = bpy.data.filepath
-        if current_file_path:
-            base_name = os.path.splitext(os.path.basename(current_file_path))[0]
-            return not base_name.lower().startswith("buildings")
-        return False
-
     def execute(self, context):
         export_path = context.scene.export_folder
 
