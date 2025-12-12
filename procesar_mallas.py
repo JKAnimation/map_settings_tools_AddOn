@@ -129,6 +129,8 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
         for mod in obj.modifiers:
             try:
                 bpy.ops.object.modifier_apply(modifier=mod.name)
+                bpy.ops.object.convert(target='MESH')
+
             except:
                 print(f"⚠ No se pudo aplicar {mod.name} en {obj.name}")
 
