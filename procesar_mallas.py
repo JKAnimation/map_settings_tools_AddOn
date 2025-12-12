@@ -16,6 +16,7 @@ class ProcesarDuplicadorProps(bpy.types.PropertyGroup):
 #   FUNCIONES AUXILIARES
 # ==============================================================
 
+
 def obtener_meshes_recursivamente(coleccion):
     objetos_mesh = []
 
@@ -31,11 +32,16 @@ def obtener_meshes_recursivamente(coleccion):
 
 
 def duplicar_coleccion_recursiva(origen, destino):
-    """Clona la estructura de subcolecciones (NO objetos aún)."""
+    """Clona estructura de subcolecciones (NO objetos aún)."""
     for sub in origen.children:
         nueva = bpy.data.collections.new(sub.name)
         destino.children.link(nueva)
         duplicar_coleccion_recursiva(sub, nueva)
+
+
+def limpiar_sufijo(nombre):
+    """Elimina sufijos .001, .002, etc."""
+    return re.sub(r"\.\d{3}$", "", nombre)
 
 
 
@@ -46,22 +52,23 @@ def duplicar_coleccion_recursiva(origen, destino):
 def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
 
     # -----------------------------------------------------------
-    # 1) Renombrar la colección verde para esta malla base
+    # 1) Renombrar colección verde con sufijo .001
     # -----------------------------------------------------------
     coleccion_verde.name = nombre_export + ".001"
 
-    # Mesh base duplicada para evitar daño
+    # Copia de la mesh base
     data_base = obj_malla.data.copy()
 
     # -----------------------------------------------------------
-    # 2) Renombrar meshes internas conservando sufijo
+    # 2) Renombrar meshes internas conservando sufijo .001
     # -----------------------------------------------------------
     for i, obj in enumerate(coleccion_verde.objects):
         if obj.type != 'MESH':
             continue
 
-        obj.data = data_base.copy()              # Cada mesh con su copia
+        obj.data = data_base.copy()
         obj.name = f"{nombre_export}_{str(i).zfill(2)}.001"
+        obj.data.name = obj.name + "_Mesh"
 
 
     # -----------------------------------------------------------
@@ -75,13 +82,14 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
 
 
     # -----------------------------------------------------------
-    # 4) Crear copia COMPLETA de la colección verde (estructura recursiva)
+    # 4) Crear copia COMPLETA de la colección verde
     # -----------------------------------------------------------
     coleccion_final = bpy.data.collections.new(nombre_export)
     coleccion_exporter.children.link(coleccion_final)
 
-    # Clonar estructura interna sin objetos
+    # Duplicar estructura interna sin objetos
     duplicar_coleccion_recursiva(coleccion_verde, coleccion_final)
+
 
     # -----------------------------------------------------------
     # 5) Duplicar objetos respetando subcolecciones
@@ -92,12 +100,15 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
                 copia = obj.copy()
                 copia.data = obj.data.copy()
 
-                copia.name = copia.name.replace(".001", "")
+                # ===============================
+                # NOMENCLATURA CORREGIDA
+                # ===============================
+                copia.name = limpiar_sufijo(obj.name)
                 copia.data.name = copia.name + "_Mesh"
 
                 destino.objects.link(copia)
 
-        # Recursividad
+        # Subcolecciones
         for sub_origen in origen.children:
             sub_destino = destino.children.get(sub_origen.name)
             copiar_objetos(sub_origen, sub_destino)
@@ -122,6 +133,7 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
                 print(f"⚠ No se pudo aplicar {mod.name} en {obj.name}")
 
         obj.select_set(False)
+
 
     print(f"✔ Procesado {nombre_export} -> Exportado en Exporter/{coleccion_final.name}")
 
@@ -166,13 +178,13 @@ class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
                 self.report({'ERROR'}, "La mesh activa NO puede tener Geometry Nodes.")
                 return {'CANCELLED'}
 
-            nombre_export = re.sub(r'\.\d{3}$', '', obj_malla.name)
+            nombre_export = limpiar_sufijo(obj_malla.name)
 
             procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export)
 
 
         # ======================================================
-        # MODO: PROCESAR TODA UNA COLECCIÓN (CON SUBCOLECCIONES)
+        # MODO: PROCESAR TODA UNA COLECCIÓN
         # ======================================================
         else:
 
@@ -187,7 +199,7 @@ class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
                 return {'CANCELLED'}
 
             for obj_malla in objetos_mesh:
-                nombre_export = re.sub(r'\.\d{3}$', '', obj_malla.name)
+                nombre_export = limpiar_sufijo(obj_malla.name)
                 procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export)
 
 
@@ -205,12 +217,3 @@ classes = (
     OBJECT_OT_procesar_desde_coleccion,
 )
 
-def register():
-    for c in classes:
-        bpy.utils.register_class(c)
-    bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=ProcesarDuplicadorProps)
-
-def unregister():
-    for c in reversed(classes):
-        bpy.utils.unregister_class(c)
-    del bpy.types.Scene.procesar_coleccion_props
