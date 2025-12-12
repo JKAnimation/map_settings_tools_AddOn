@@ -1,61 +1,20 @@
 import bpy
 import re
 
+
+# ==============================================================
+#   PROPIEDADES
+# ==============================================================
+
 class ProcesarDuplicadorProps(bpy.types.PropertyGroup):
     coleccion_target: bpy.props.StringProperty(name="Colección Target")
     usar_mesh_activa: bpy.props.BoolProperty(name="Usar Mesh Activa", default=True)
 
 
-def procesar_con_malla_base(obj_malla, coleccion_origen, nombre_export):
-    coleccion_origen.name = nombre_export + ".001"
 
-    for i, obj in enumerate(coleccion_origen.objects):
-        if obj != obj_malla and obj.type == 'MESH':
-            obj.data = obj_malla.data
-            obj.name = f"{nombre_export}_{str(i).zfill(2)}.001"
-
-    if "Exporter" not in bpy.data.collections:
-        coleccion_exporter = bpy.data.collections.new("Exporter")
-        bpy.context.scene.collection.children.link(coleccion_exporter)
-    else:
-        coleccion_exporter = bpy.data.collections["Exporter"]
-
-    coleccion_duplicada = bpy.data.collections.new(name=nombre_export)
-    coleccion_exporter.children.link(coleccion_duplicada)
-
-    objetos_originales = [obj for obj in coleccion_origen.objects if obj.type == 'MESH']
-    nombres_originales = {obj.name for obj in objetos_originales}
-
-    bpy.ops.object.select_all(action='DESELECT')
-    for obj in objetos_originales:
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.convert(target='MESH')
-        obj.select_set(False)
-
-    nuevos_objs = [obj for obj in bpy.context.selected_objects if obj.name not in nombres_originales]
-
-    for obj in nuevos_objs:
-        nombre_base_obj = re.sub(r'\.\d{3}$', '', obj.name)
-        obj.name = nombre_base_obj
-        if obj.data:
-            obj.data.name = nombre_base_obj + "_Mesh"
-
-        for col in obj.users_collection:
-            col.objects.unlink(obj)
-        coleccion_duplicada.objects.link(obj)
-
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='BOUNDS')
-
-    for obj in list(coleccion_origen.objects):
-        if obj.name not in nombres_originales:
-            coleccion_origen.objects.unlink(obj)
-
-    print(f"✅ Procesado '{nombre_export}' -> Exportado en 'Exporter/{coleccion_duplicada.name}'")
-
+# ==============================================================
+#   FUNCIONES AUXILIARES
+# ==============================================================
 
 def obtener_meshes_recursivamente(coleccion):
     objetos_mesh = []
@@ -64,12 +23,113 @@ def obtener_meshes_recursivamente(coleccion):
         for obj in col.objects:
             if obj.type == 'MESH':
                 objetos_mesh.append(obj)
-        for subcol in col.children:
-            recorrer(subcol)
+        for sub in col.children:
+            recorrer(sub)
 
     recorrer(coleccion)
     return objetos_mesh
 
+
+def duplicar_coleccion_recursiva(origen, destino):
+    """Clona la estructura de subcolecciones (NO objetos aún)."""
+    for sub in origen.children:
+        nueva = bpy.data.collections.new(sub.name)
+        destino.children.link(nueva)
+        duplicar_coleccion_recursiva(sub, nueva)
+
+
+
+# ==============================================================
+#   PROCESAMIENTO PRINCIPAL SEGURO
+# ==============================================================
+
+def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
+
+    # -----------------------------------------------------------
+    # 1) Renombrar la colección verde para esta malla base
+    # -----------------------------------------------------------
+    coleccion_verde.name = nombre_export + ".001"
+
+    # Mesh base duplicada para evitar daño
+    data_base = obj_malla.data.copy()
+
+    # -----------------------------------------------------------
+    # 2) Renombrar meshes internas conservando sufijo
+    # -----------------------------------------------------------
+    for i, obj in enumerate(coleccion_verde.objects):
+        if obj.type != 'MESH':
+            continue
+
+        obj.data = data_base.copy()              # Cada mesh con su copia
+        obj.name = f"{nombre_export}_{str(i).zfill(2)}.001"
+
+
+    # -----------------------------------------------------------
+    # 3) Crear colección Exporter si no existe
+    # -----------------------------------------------------------
+    if "Exporter" not in bpy.data.collections:
+        coleccion_exporter = bpy.data.collections.new("Exporter")
+        bpy.context.scene.collection.children.link(coleccion_exporter)
+    else:
+        coleccion_exporter = bpy.data.collections["Exporter"]
+
+
+    # -----------------------------------------------------------
+    # 4) Crear copia COMPLETA de la colección verde (estructura recursiva)
+    # -----------------------------------------------------------
+    coleccion_final = bpy.data.collections.new(nombre_export)
+    coleccion_exporter.children.link(coleccion_final)
+
+    # Clonar estructura interna sin objetos
+    duplicar_coleccion_recursiva(coleccion_verde, coleccion_final)
+
+    # -----------------------------------------------------------
+    # 5) Duplicar objetos respetando subcolecciones
+    # -----------------------------------------------------------
+    def copiar_objetos(origen, destino):
+        for obj in origen.objects:
+            if obj.type == 'MESH':
+                copia = obj.copy()
+                copia.data = obj.data.copy()
+
+                copia.name = copia.name.replace(".001", "")
+                copia.data.name = copia.name + "_Mesh"
+
+                destino.objects.link(copia)
+
+        # Recursividad
+        for sub_origen in origen.children:
+            sub_destino = destino.children.get(sub_origen.name)
+            copiar_objetos(sub_origen, sub_destino)
+
+    copiar_objetos(coleccion_verde, coleccion_final)
+
+
+    # -----------------------------------------------------------
+    # 6) Aplicar modificadores SOLO en la copia
+    # -----------------------------------------------------------
+    for obj in coleccion_final.all_objects:
+        if obj.type != 'MESH':
+            continue
+
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        for mod in obj.modifiers:
+            try:
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+            except:
+                print(f"⚠ No se pudo aplicar {mod.name} en {obj.name}")
+
+        obj.select_set(False)
+
+    print(f"✔ Procesado {nombre_export} -> Exportado en Exporter/{coleccion_final.name}")
+
+
+
+# ==============================================================
+#   OPERADOR PRINCIPAL
+# ==============================================================
 
 class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
     bl_idname = "object.procesar_desde_coleccion"
@@ -83,42 +143,74 @@ class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.procesar_coleccion_props
 
-        coleccion_origen = next((col for col in bpy.data.collections if col.color_tag == 'COLOR_04'), None)
-        if not coleccion_origen:
-            self.report({'ERROR'}, "No se encontró una colección con color_tag 'COLOR_04'.")
+        coleccion_verde = next((c for c in bpy.data.collections if c.color_tag == 'COLOR_04'), None)
+        if not coleccion_verde:
+            self.report({'ERROR'}, "No existe colección verde.")
             return {'CANCELLED'}
 
+        # ======================================================
+        # MODO: USAR SOLO LA MESH ACTIVA
+        # ======================================================
         if props.usar_mesh_activa:
             obj_malla = context.active_object
+
             if not obj_malla or obj_malla.type != 'MESH':
-                self.report({'ERROR'}, "Selecciona una mesh activa.")
+                self.report({'ERROR'}, "Selecciona una mesh activa válida.")
                 return {'CANCELLED'}
-            if coleccion_origen in obj_malla.users_collection:
-                self.report({'ERROR'}, "La mesh activa está en la colección de origen.")
+
+            if coleccion_verde in obj_malla.users_collection:
+                self.report({'ERROR'}, "La mesh activa NO puede estar dentro de la colección verde.")
                 return {'CANCELLED'}
-            if any(mod.type == 'NODES' for mod in obj_malla.modifiers):
-                self.report({'ERROR'}, "La mesh activa tiene Geometry Nodes.")
+
+            if any(m.type == 'NODES' for m in obj_malla.modifiers):
+                self.report({'ERROR'}, "La mesh activa NO puede tener Geometry Nodes.")
                 return {'CANCELLED'}
 
             nombre_export = re.sub(r'\.\d{3}$', '', obj_malla.name)
-            bpy.context.view_layer.objects.active = obj_malla
-            procesar_con_malla_base(obj_malla, coleccion_origen, nombre_export)
 
+            procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export)
+
+
+        # ======================================================
+        # MODO: PROCESAR TODA UNA COLECCIÓN (CON SUBCOLECCIONES)
+        # ======================================================
         else:
+
             coleccion_target = bpy.data.collections.get(props.coleccion_target)
             if not coleccion_target:
-                self.report({'ERROR'}, "No se encontró la colección seleccionada.")
+                self.report({'ERROR'}, "Colección destino no encontrada.")
                 return {'CANCELLED'}
 
             objetos_mesh = obtener_meshes_recursivamente(coleccion_target)
             if not objetos_mesh:
-                self.report({'ERROR'}, "No se encontraron meshes en la colección seleccionada.")
+                self.report({'ERROR'}, "No hay meshes dentro de la colección destino.")
                 return {'CANCELLED'}
 
             for obj_malla in objetos_mesh:
                 nombre_export = re.sub(r'\.\d{3}$', '', obj_malla.name)
-                bpy.context.view_layer.objects.active = obj_malla
-                procesar_con_malla_base(obj_malla, coleccion_origen, nombre_export)
+                procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export)
 
-        self.report({'INFO'}, "🎉 Proceso completado.")
+
+        self.report({'INFO'}, "Proceso completado correctamente.")
         return {'FINISHED'}
+
+
+
+# ==============================================================
+#   REGISTRO
+# ==============================================================
+
+classes = (
+    ProcesarDuplicadorProps,
+    OBJECT_OT_procesar_desde_coleccion,
+)
+
+def register():
+    for c in classes:
+        bpy.utils.register_class(c)
+    bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=ProcesarDuplicadorProps)
+
+def unregister():
+    for c in reversed(classes):
+        bpy.utils.unregister_class(c)
+    del bpy.types.Scene.procesar_coleccion_props
