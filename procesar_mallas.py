@@ -93,7 +93,7 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
                 copia.data = obj.data.copy()
 
                 copia.name = copia.name.replace(".001", "")
-                copia.data.name = copia.name + "_Mesh"
+                copia.data.name = copia.name
 
                 destino.objects.link(copia)
 
@@ -108,18 +108,19 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
     # -----------------------------------------------------------
     # 6) Aplicar modificadores SOLO en la copia
     # -----------------------------------------------------------
+    bpy.context.view_layer.update()
+    
     for obj in coleccion_final.all_objects:
         if obj.type != 'MESH':
             continue
 
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
-
-        for mod in obj.modifiers:
-            try:
-                bpy.ops.object.modifier_apply(modifier=mod.name)
-            except:
-                print(f"⚠ No se pudo aplicar {mod.name} en {obj.name}")
+        
+        bpy.ops.object.convert(target='MESH')
+        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='BOUNDS')
+        obj.name=obj.name.replace(".002","")
+        obj.data.name=obj.name
 
         obj.select_set(False)
 
@@ -204,13 +205,3 @@ classes = (
     ProcesarDuplicadorProps,
     OBJECT_OT_procesar_desde_coleccion,
 )
-
-def register():
-    for c in classes:
-        bpy.utils.register_class(c)
-    bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=ProcesarDuplicadorProps)
-
-def unregister():
-    for c in reversed(classes):
-        bpy.utils.unregister_class(c)
-    del bpy.types.Scene.procesar_coleccion_props
