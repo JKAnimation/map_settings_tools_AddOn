@@ -31,29 +31,44 @@ class OBJECT_OT_export_fbx(bpy.types.Operator):
             "axis_up": 'Y'
         }
 
+        # 🔒 Backup de materiales
+        material_backup = {}
+
         def export_collection(collection):
             objetos_validos = [
                 obj for obj in collection.objects
-                if obj.type == 'MESH' and
-                obj.data is not None and
-                hasattr(obj.data, "vertices") and
-                len(obj.data.vertices) > 0
+                if obj.type == 'MESH'
+                and obj.data is not None
+                and hasattr(obj.data, "vertices")
+                and len(obj.data.vertices) > 0
             ]
 
-            if objetos_validos:
-                bpy.ops.object.select_all(action='DESELECT')
-
-                for obj in objetos_validos:
-                    obj.select_set(True)
-                    obj.data.materials.clear()
-
-                export_filename = os.path.join(export_path, collection.name + ".fbx")
-                bpy.ops.export_scene.fbx(filepath=export_filename, **export_options)
-                print(f"✅ Exportado: {export_filename}")
-            else:
+            if not objetos_validos:
                 print(f"⛔ Colección '{collection.name}' vacía o sin mallas válidas. No se exporta.")
+                return
 
-        # Exportar la colección activa si no tiene subcolecciones
+            bpy.ops.object.select_all(action='DESELECT')
+
+            for obj in objetos_validos:
+                obj.select_set(True)
+
+                # 📦 Guardar materiales (manteniendo orden y slots vacíos)
+                material_backup[obj.name] = list(obj.data.materials)
+
+                # 🧹 Limpiar materiales para export
+                obj.data.materials.clear()
+
+            export_filename = os.path.join(export_path, collection.name + ".fbx")
+            bpy.ops.export_scene.fbx(filepath=export_filename, **export_options)
+            print(f"✅ Exportado: {export_filename}")
+
+            # 🔁 Restaurar materiales
+            for obj in objetos_validos:
+                mats = material_backup.get(obj.name, [])
+                for mat in mats:
+                    obj.data.materials.append(mat)
+
+        # Exportar la colección activa o sus hijas
         if not main_collection.children:
             export_collection(main_collection)
         else:
