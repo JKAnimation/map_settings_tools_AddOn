@@ -92,26 +92,21 @@ class VIEW3D_PT_procesar_mallas(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        props = getattr(context.scene, "procesar_coleccion_props", None)
+        props = context.scene.procesar_coleccion_props
 
-        if props is not None:
-            layout.prop(props, "usar_mesh_activa")
-            if not getattr(props, "usar_mesh_activa", False):
-                layout.prop_search(props, "coleccion_target", bpy.data, "collections", text="Colección")
-            layout.operator("object.procesar_desde_coleccion", text="Procesar Geometría")
-        else:
-            layout.label(text="(Procesar mallas: props no disponibles)")
+        layout.prop(props, "usar_mesh_activa")
+        if not props.usar_mesh_activa:
+            layout.prop_search(props, "coleccion_target", bpy.data, "collections", text="Colección")
+        layout.operator("object.procesar_desde_coleccion", text="Procesar Geometría")
+
 
         layout.separator()
 
+
         layout.label(text="Actualizar FBX desde .blend:")
-        actualizar_props = getattr(context.scene, "actualizar_fbx_props", None)
-        if actualizar_props is not None:
-            layout.prop(actualizar_props, "ruta_blend")
-            layout.prop(actualizar_props, "nombre_coleccion")
-            layout.operator("object.actualizar_coleccion_externa", icon="FILE_REFRESH")
-        else:
-            layout.label(text="(Actualizar FBX: props no disponibles)")
+        layout.prop(context.scene.actualizar_fbx_props, "ruta_blend")
+        layout.prop(context.scene.actualizar_fbx_props, "nombre_coleccion")
+        layout.operator("object.actualizar_coleccion_externa", icon="FILE_REFRESH")
 
 class VIEW3D_PT_collection_list_tools(bpy.types.Panel):
     bl_label = "Collection list generator"

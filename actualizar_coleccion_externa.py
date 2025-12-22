@@ -47,6 +47,13 @@ class OBJECT_OT_actualizar_coleccion_externa(Operator):
         if not os.path.exists(ruta_blend):
             self.report({'ERROR'}, "Archivo fuente (.blend) no encontrado.")
             return {'CANCELLED'}
+        
+        # -------------------------------------------------------------------
+        # DIRECTORIO TEMPORAL Y RUTAS
+        # -------------------------------------------------------------------
+        temp_dir = tempfile.mkdtemp()
+        fbx_path = os.path.join(temp_dir, "temp_export.fbx")
+        blender_path = bpy.app.binary_path
 
         # -------------------------------------------------------------------
         # ARCHIVO ACTUAL (EL CUTTER)
@@ -77,15 +84,20 @@ class OBJECT_OT_actualizar_coleccion_externa(Operator):
         target_blend = os.path.join(carpeta_destino, nombre_destino)
 
         if not os.path.exists(target_blend):
-            self.report({'ERROR'}, f"No existe el archivo destino:\n{target_blend}")
-            return {'CANCELLED'}
+            # Crear carpetas si no existen
+            os.makedirs(carpeta_destino, exist_ok=True)
 
-        # -------------------------------------------------------------------
-        # DIRECTORIO TEMPORAL Y RUTAS
-        # -------------------------------------------------------------------
-        temp_dir = tempfile.mkdtemp()
-        fbx_path = os.path.join(temp_dir, "temp_export.fbx")
-        blender_path = bpy.app.binary_path
+            # Crear archivo .blend vacío
+            subprocess.run([
+                blender_path,
+                "--background",
+                "--factory-startup",
+                "--python-expr",
+                f"import bpy; bpy.ops.wm.save_mainfile(filepath=r'{target_blend}')"
+            ])
+
+
+
 
         # -------------------------------------------------------------------
         # SCRIPT: EXPORTAR FBX DESDE EL ARCHIVO FUENTE

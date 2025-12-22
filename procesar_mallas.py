@@ -100,16 +100,8 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
                 copia = obj.copy()
                 copia.data = obj.data.copy()
 
-<<<<<<< HEAD
                 copia.name = copia.name.replace(".001", "")
                 copia.data.name = copia.name
-=======
-                # ===============================
-                # NOMENCLATURA CORREGIDA
-                # ===============================
-                copia.name = limpiar_sufijo(obj.name)
-                copia.data.name = copia.name + "_Mesh"
->>>>>>> 5e21acb5d8108d368ccf2e9580061ab466621d24
 
                 destino.objects.link(copia)
 
@@ -132,22 +124,11 @@ def procesar_con_malla_base(obj_malla, coleccion_verde, nombre_export):
 
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
-<<<<<<< HEAD
         
         bpy.ops.object.convert(target='MESH')
         bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='BOUNDS')
         obj.name=obj.name.replace(".002","")
         obj.data.name=obj.name
-=======
-
-        for mod in obj.modifiers:
-            try:
-                bpy.ops.object.modifier_apply(modifier=mod.name)
-                bpy.ops.object.convert(target='MESH')
-
-            except:
-                print(f"⚠ No se pudo aplicar {mod.name} en {obj.name}")
->>>>>>> 5e21acb5d8108d368ccf2e9580061ab466621d24
 
         obj.select_set(False)
 
@@ -225,15 +206,3 @@ class OBJECT_OT_procesar_desde_coleccion(bpy.types.Operator):
 
 
 
-# ==============================================================
-#   REGISTRO
-# ==============================================================
-
-classes = (
-    ProcesarDuplicadorProps,
-    OBJECT_OT_procesar_desde_coleccion,
-)
-<<<<<<< HEAD
-=======
-
->>>>>>> 5e21acb5d8108d368ccf2e9580061ab466621d24
