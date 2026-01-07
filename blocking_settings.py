@@ -11,7 +11,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return not any(
-            o.type == 'MESH' and o.name == "Insides_Base"
+            o.type == 'MESH' and o.name in {"Insides_Base", "Levels_Help"}
             for o in context.scene.objects
         )
 
@@ -25,23 +25,59 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         self.load_node_group(blend_path, "Internal rounder")
         self.load_node_group(blend_path, "Clean_Curves")
 
-        collection = context.view_layer.active_layer_collection.collection
+        # -------------------------------------------------
+        # BLOCKING
+        # -------------------------------------------------
+        if "Blocking" in bpy.data.collections:
+            self.process_collection(
+                collection=bpy.data.collections["Blocking"],
+                final_obj_name="Insides_Base",
+                final_data_name="Insides",
+                create_road_help=create_road_help
+            )
+
+        # -------------------------------------------------
+        # LEVELS
+        # -------------------------------------------------
+        if "Levels" in bpy.data.collections:
+            self.process_collection(
+                collection=bpy.data.collections["Levels"],
+                final_obj_name="Levels_Help",
+                final_data_name="Levels",
+                create_road_help=False
+            )
+
+        self.report({'INFO'}, "Blocking and Levels processed successfully")
+        return {'FINISHED'}
+
+    # ---------------------------------------------------------
+    # CORE PIPELINE (REUTILIZABLE)
+    # ---------------------------------------------------------
+
+    def process_collection(
+        self,
+        collection,
+        final_obj_name,
+        final_data_name,
+        create_road_help
+    ):
+
         meshes = [o for o in collection.all_objects if o.type == 'MESH']
-
         if not meshes:
-            self.report({'ERROR'}, "No meshes found")
-            return {'CANCELLED'}
+            return
 
-        # -------------------------------------------------
+        context = bpy.context
+        processed = []
+
+        # ----------------------------------
         # PROCESS EACH MESH
-        # -------------------------------------------------
-
+        # ----------------------------------
         for mesh in meshes:
             bpy.ops.object.select_all(action='DESELECT')
             mesh.select_set(True)
             context.view_layer.objects.active = mesh
 
-            # ✅ Vertex group BEFORE modifiers
+            # Vertex Group BEFORE modifiers
             self.create_vertex_group_for_mesh(mesh)
 
             self.add_decimate(mesh, 0.1)
@@ -57,23 +93,24 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             bpy.ops.object.convert(target='MESH')
             bpy.context.view_layer.update()
 
-            # (opcional pero seguro)
+            # Safe re-creation (GN already collapsed)
             self.create_vertex_group_for_mesh(mesh)
 
-        # -------------------------------------------------
-        # JOIN
-        # -------------------------------------------------
+            processed.append(mesh)
 
+        # ----------------------------------
+        # JOIN (SIEMPRE)
+        # ----------------------------------
         bpy.ops.object.select_all(action='DESELECT')
-        for m in meshes:
+        for m in processed:
             m.select_set(True)
 
-        context.view_layer.objects.active = meshes[0]
+        context.view_layer.objects.active = processed[0]
         bpy.ops.object.join()
 
         joined = context.view_layer.objects.active
-        joined.name = "Insides_Base"
-        joined.data.name = "Insides"
+        joined.name = final_obj_name
+        joined.data.name = final_data_name
 
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
@@ -82,12 +119,9 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         if create_road_help:
             self.add_road_help_plane(joined)
 
-        self.report({'INFO'}, "Blocking Settings finished correctly")
-        return {'FINISHED'}
-
-    # -------------------------------------------------
+    # ---------------------------------------------------------
     # HELPERS
-    # -------------------------------------------------
+    # ---------------------------------------------------------
 
     def load_node_group(self, blend_path, name):
         if name not in bpy.data.node_groups:
@@ -105,10 +139,12 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     def add_clean_curves(self, mesh):
         mod = mesh.modifiers.new("Clean_Curves", 'NODES')
         mod.node_group = bpy.data.node_groups["Clean_Curves"]
+        mod.node_group.use_fake_user = True
 
     def add_internal_rounder(self, mesh):
         mod = mesh.modifiers.new("Internal rounder", 'NODES')
         mod.node_group = bpy.data.node_groups["Internal rounder"]
+        mod.node_group.use_fake_user = True
 
     def add_weld(self, mesh):
         mod = mesh.modifiers.new("Weld", 'WELD')
@@ -123,9 +159,9 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         indices = [v.index for v in mesh.data.vertices]
         vg.add(indices, 1.0, 'REPLACE')
 
-    # -------------------------------------------------
+    # ---------------------------------------------------------
     # EXTRAS
-    # -------------------------------------------------
+    # ---------------------------------------------------------
 
     def add_color_attribute(self, obj):
         mesh = obj.data
@@ -139,6 +175,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
                 c.color = (0, 1, 0, 1)
 
     def add_road_help_plane(self, mesh):
+
         min_x, min_y, _ = mesh.bound_box[0]
         max_x, max_y, _ = mesh.bound_box[6]
 
@@ -158,6 +195,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
 
         plane = bpy.context.object
         plane.name = "RoadHelp"
+        plane.data.name = "RoadMain"
         plane.scale = (size_x, size_y, 1)
 
         bpy.ops.object.transform_apply(location=True, scale=True)
