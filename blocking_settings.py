@@ -1,211 +1,164 @@
 import bpy
 import os
+import math
+
 
 class OBJECT_OT_blocking_settings(bpy.types.Operator):
     bl_idname = "object.blocking_settings"
     bl_label = "Blocking Settings"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Convierte las mesh de áreas de Figma a una mesh con curvas internas en Blender y agrega un plano de ayuda."
 
     @classmethod
     def poll(cls, context):
-        for obj in context.scene.objects:
-            if obj.type == 'MESH' and obj.name == "Insides_Base":
-                return False
-        return True
+        return not any(
+            o.type == 'MESH' and o.name == "Insides_Base"
+            for o in context.scene.objects
+        )
 
     def execute(self, context):
-        if not hasattr(context.scene, 'create_road_help'):
-            self.report({'ERROR'}, "Property 'create_road_help' not found in scene")
-            return {'CANCELLED'}
 
-        create_road_help = context.scene.create_road_help
+        create_road_help = getattr(context.scene, "create_road_help", False)
 
-        addon_directory = os.path.dirname(__file__)
-        blend_file_path = os.path.join(addon_directory, "Map_basics.blend")
+        addon_dir = os.path.dirname(__file__)
+        blend_path = os.path.join(addon_dir, "Map_basics.blend")
 
-        if not os.path.isfile(blend_file_path):
-            self.report({'ERROR'}, f"Blend file '{blend_file_path}' not found")
-            return {'CANCELLED'}
+        self.load_node_group(blend_path, "Internal rounder")
+        self.load_node_group(blend_path, "Clean_Curves")
 
-        self.apply_modifiers_and_join_meshes(blend_file_path, create_road_help)
-        
-        return {'FINISHED'}
+        collection = context.view_layer.active_layer_collection.collection
+        meshes = [o for o in collection.all_objects if o.type == 'MESH']
 
-    def apply_modifiers_and_join_meshes(self, blend_file_path, create_road_help):
-        self.report({'INFO'}, "Starting the script...")
-
-        if "Internal rounder" not in bpy.data.node_groups:
-            self.report({'INFO'}, "Loading Internal rounder node group...")
-            bpy.ops.wm.append(
-                filepath=os.path.join(blend_file_path, "NodeTree", "Internal rounder"),
-                directory=os.path.join(blend_file_path, "NodeTree"),
-                filename="Internal rounder"
-            )
-        else:
-            self.report({'INFO'}, "Internal rounder node group already loaded")
-
-        if "Clean_Curves" not in bpy.data.node_groups:
-            self.report({'INFO'}, "Loading Clean_Curves node group...")
-            bpy.ops.wm.append(
-                filepath=os.path.join(blend_file_path, "NodeTree"),
-                directory=os.path.join(blend_file_path, "NodeTree"),
-                filename="Clean_Curves"
-            )
-        else:
-            self.report({'INFO'}, "Clean_Curves node group already loaded")
-
-        active_collection = bpy.context.view_layer.active_layer_collection.collection
-        if not active_collection:
-            self.report({'ERROR'}, "No active collection found")
-            return
-
-        if active_collection.name not in bpy.data.collections:
-            self.report({'ERROR'}, f"Collection '{active_collection.name}' has been removed")
-            return
-
-        collection_name = active_collection.name
-        self.report({'INFO'}, f"Selected collection: {collection_name}")
-
-        context = bpy.context
-        original_objects = context.view_layer.objects[:]
-
-        meshes = [obj for obj in active_collection.all_objects if obj.type == 'MESH']
         if not meshes:
-            self.report({'ERROR'}, "No meshes found in the selected collection")
-            return
+            self.report({'ERROR'}, "No meshes found")
+            return {'CANCELLED'}
+
+        # -------------------------------------------------
+        # PROCESS EACH MESH
+        # -------------------------------------------------
 
         for mesh in meshes:
-            self.report({'INFO'}, f"Processing mesh: {mesh.name}")
-            context.view_layer.objects.active = mesh
             bpy.ops.object.select_all(action='DESELECT')
             mesh.select_set(True)
+            context.view_layer.objects.active = mesh
 
-            decimate_modifier = mesh.modifiers.new(name="Decimate", type='DECIMATE')
-            decimate_modifier.decimate_type = 'DISSOLVE'
-            decimate_modifier.angle_limit = .1 * (3.14159 / 180)
-            self.report({'INFO'}, f"Added Decimate modifier to {mesh.name}")
-
-            clean_curves_modifier = mesh.modifiers.new(name="Clean_Curves", type='NODES')
-            clean_curves_modifier.node_group = bpy.data.node_groups.get("Clean_Curves")
-            clean_curves_modifier.node_group.use_fake_user = True
-            self.report({'INFO'}, f"Added Clean_Curves Geometry Nodes modifier to {mesh.name}")
-    
-            decimate_modifier = mesh.modifiers.new(name="Decimate", type='DECIMATE')
-            decimate_modifier.decimate_type = 'DISSOLVE'
-            decimate_modifier.angle_limit = 3 * (3.14159 / 180)
-            self.report({'INFO'}, f"Added Decimate modifier to {mesh.name}")
-
-            decimate_modifier = mesh.modifiers.new(name="Decimate", type='DECIMATE')
-            decimate_modifier.decimate_type = 'DISSOLVE'
-            decimate_modifier.angle_limit = 3 * (3.14159 / 180)
-            self.report({'INFO'}, f"Added Decimate modifier to {mesh.name}")
-
-            internal_rounder_modifier = mesh.modifiers.new(name="Internal rounder", type='NODES')
-            internal_rounder_modifier.node_group = bpy.data.node_groups.get("Internal rounder")
-            internal_rounder_modifier.node_group.use_fake_user = True
-            self.report({'INFO'}, f"Added Internal rounder Geometry Nodes modifier to {mesh.name}")
-
-            weld_modifier = mesh.modifiers.new(name="Weld", type='WELD')
-            weld_modifier.merge_threshold = .07
-            self.report({'INFO'}, f"Added Weld modifier to {mesh.name}")
-
-            clean_curves_modifier = mesh.modifiers.new(name="Clean_Curves", type='NODES')
-            clean_curves_modifier.node_group = bpy.data.node_groups.get("Clean_Curves")
-            clean_curves_modifier.node_group.use_fake_user = True
-            self.report({'INFO'}, f"Added Clean_Curves Geometry Nodes modifier to {mesh.name}")
-
-
-            bpy.ops.object.convert(target='MESH')
-            self.report({'INFO'}, f"Applied all modifiers to {mesh.name}")
-
-            bpy.context.view_layer.update()
-
+            # ✅ Vertex group BEFORE modifiers
             self.create_vertex_group_for_mesh(mesh)
 
-        bpy.context.view_layer.update()
+            self.add_decimate(mesh, 0.1)
+            self.add_clean_curves(mesh)
+            self.add_decimate(mesh, 3)
+            self.add_decimate(mesh, 3)
 
-        context.view_layer.objects.active = meshes[0]
-        for mesh in meshes:
-            mesh.select_set(True)
-        bpy.ops.object.join()
-        self.report({'INFO'}, "Joined all meshes")
+            self.add_internal_rounder(mesh)
+            self.add_clean_curves(mesh)
 
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        
-        joined_mesh = context.view_layer.objects.active
-        joined_mesh.name = "Insides_Base"
-        joined_mesh.data.name = "Insides"
-        self.report({'INFO'}, f"Renamed joined mesh to {collection_name}")
+            self.add_weld(mesh)
 
-        self.add_color_attribute(joined_mesh)
-        self.report({'INFO'}, f"Added 'Green_C' color attribute to {joined_mesh.name}")
+            bpy.ops.object.convert(target='MESH')
+            bpy.context.view_layer.update()
 
-        if create_road_help:
-            self.add_road_help_plane(joined_mesh)
+            # (opcional pero seguro)
+            self.create_vertex_group_for_mesh(mesh)
+
+        # -------------------------------------------------
+        # JOIN
+        # -------------------------------------------------
 
         bpy.ops.object.select_all(action='DESELECT')
-        joined_mesh.select_set(True)
-        context.view_layer.objects.active = joined_mesh
-        self.report({'INFO'}, "Script finished successfully")
+        for m in meshes:
+            m.select_set(True)
+
+        context.view_layer.objects.active = meshes[0]
+        bpy.ops.object.join()
+
+        joined = context.view_layer.objects.active
+        joined.name = "Insides_Base"
+        joined.data.name = "Insides"
+
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+        self.add_color_attribute(joined)
+
+        if create_road_help:
+            self.add_road_help_plane(joined)
+
+        self.report({'INFO'}, "Blocking Settings finished correctly")
+        return {'FINISHED'}
+
+    # -------------------------------------------------
+    # HELPERS
+    # -------------------------------------------------
+
+    def load_node_group(self, blend_path, name):
+        if name not in bpy.data.node_groups:
+            bpy.ops.wm.append(
+                filepath=os.path.join(blend_path, "NodeTree", name),
+                directory=os.path.join(blend_path, "NodeTree"),
+                filename=name
+            )
+
+    def add_decimate(self, mesh, angle):
+        mod = mesh.modifiers.new("Decimate", 'DECIMATE')
+        mod.decimate_type = 'DISSOLVE'
+        mod.angle_limit = angle * math.pi / 180
+
+    def add_clean_curves(self, mesh):
+        mod = mesh.modifiers.new("Clean_Curves", 'NODES')
+        mod.node_group = bpy.data.node_groups["Clean_Curves"]
+
+    def add_internal_rounder(self, mesh):
+        mod = mesh.modifiers.new("Internal rounder", 'NODES')
+        mod.node_group = bpy.data.node_groups["Internal rounder"]
+
+    def add_weld(self, mesh):
+        mod = mesh.modifiers.new("Weld", 'WELD')
+        mod.merge_threshold = 0.07
 
     def create_vertex_group_for_mesh(self, mesh):
-        vertex_group = mesh.vertex_groups.new(name=mesh.name)
-        vertex_indices = [v.index for v in mesh.data.vertices]
-        vertex_group.add(vertex_indices, 1.0, 'REPLACE')
-        self.report({'INFO'}, f"Vertex group created for mesh: {mesh.name}")
+        if mesh.name not in mesh.vertex_groups:
+            vg = mesh.vertex_groups.new(name=mesh.name)
+        else:
+            vg = mesh.vertex_groups[mesh.name]
 
-    def add_road_help_plane(self, mesh):
-        min_x, min_y, min_z = mesh.bound_box[0]
-        max_x, max_y, max_z = mesh.bound_box[6]
+        indices = [v.index for v in mesh.data.vertices]
+        vg.add(indices, 1.0, 'REPLACE')
 
-        min_x -= 24
-        max_x += 24
-        min_y -= 24
-        max_y += 24
-
-        x_size = max_x - min_x
-        y_size = max_y - min_y
-
-        bpy.ops.mesh.primitive_plane_add(size=1, location=(min_x + (x_size/2), min_y + (y_size/2), 0))
-        road_help_plane = bpy.context.object
-        road_help_plane.name = "RoadHelp"
-        road_help_plane.data.name = "RoadMain"
-
-        road_help_plane.scale = (x_size, y_size, 1)
-
-        bpy.ops.object.transform_apply(location=True, rotation=False, scale=True)
-
-        self.add_color_attribute(road_help_plane)
-        self.report({'INFO'}, f"Added 'Green_C' color attribute to {road_help_plane.name}")
-
-        if "UVCam" not in road_help_plane.data.uv_layers:
-            road_help_plane.data.uv_layers.new(name="UVCam")
-            self.report({'INFO'}, "Added UVCam UV map to RoadHelp plane")
-
-        if "UVMap" not in road_help_plane.data.uv_layers:
-            road_help_plane.data.uv_layers.new(name="UVMap")
-            self.report({'INFO'}, "Added UVMap UV map to RoadHelp plane")
-
-        if "UVCam" not in mesh.data.uv_layers:
-            mesh.data.uv_layers.new(name="UVCam")
-            self.report({'INFO'}, "Added UVCam UV map to Blocking mesh")
-
-        if "UVMap" not in mesh.data.uv_layers:
-            mesh.data.uv_layers.new(name="UVMap")
-            self.report({'INFO'}, "Added UVMap UV map to Blocking mesh")
+    # -------------------------------------------------
+    # EXTRAS
+    # -------------------------------------------------
 
     def add_color_attribute(self, obj):
-        if obj.type == 'MESH':
-            mesh = obj.data
-            if "Green_C" not in mesh.color_attributes:
-                color_attr = mesh.color_attributes.new(
-                    name="Green_C",
-                    type='FLOAT_COLOR',
-                    domain='POINT'
-                )
-                for color in color_attr.data:
-                    color.color = (0.0, 1.0, 0.0, 1.0)
-                self.report({'INFO'}, f"Color attribute 'Green_C' created on {obj.name}")
-            else:
-                self.report({'INFO'}, f"Color attribute 'Green_C' already exists on {obj.name}")
+        mesh = obj.data
+        if "Green_C" not in mesh.color_attributes:
+            attr = mesh.color_attributes.new(
+                name="Green_C",
+                type='FLOAT_COLOR',
+                domain='POINT'
+            )
+            for c in attr.data:
+                c.color = (0, 1, 0, 1)
+
+    def add_road_help_plane(self, mesh):
+        min_x, min_y, _ = mesh.bound_box[0]
+        max_x, max_y, _ = mesh.bound_box[6]
+
+        margin = 24
+        min_x -= margin
+        max_x += margin
+        min_y -= margin
+        max_y += margin
+
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+
+        bpy.ops.mesh.primitive_plane_add(
+            size=1,
+            location=(min_x + size_x / 2, min_y + size_y / 2, 0)
+        )
+
+        plane = bpy.context.object
+        plane.name = "RoadHelp"
+        plane.scale = (size_x, size_y, 1)
+
+        bpy.ops.object.transform_apply(location=True, scale=True)
+        self.add_color_attribute(plane)
