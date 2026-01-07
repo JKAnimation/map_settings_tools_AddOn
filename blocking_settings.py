@@ -35,6 +35,16 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     def apply_modifiers_and_join_meshes(self, blend_file_path, create_road_help):
         self.report({'INFO'}, "Starting the script...")
 
+        if "Internal rounder" not in bpy.data.node_groups:
+            self.report({'INFO'}, "Loading Internal rounder node group...")
+            bpy.ops.wm.append(
+                filepath=os.path.join(blend_file_path, "NodeTree", "Internal rounder"),
+                directory=os.path.join(blend_file_path, "NodeTree"),
+                filename="Internal rounder"
+            )
+        else:
+            self.report({'INFO'}, "Internal rounder node group already loaded")
+
         if "Clean_Curves" not in bpy.data.node_groups:
             self.report({'INFO'}, "Loading Clean_Curves node group...")
             bpy.ops.wm.append(
@@ -91,14 +101,20 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             decimate_modifier.angle_limit = 3 * (3.14159 / 180)
             self.report({'INFO'}, f"Added Decimate modifier to {mesh.name}")
 
+            internal_rounder_modifier = mesh.modifiers.new(name="Internal rounder", type='NODES')
+            internal_rounder_modifier.node_group = bpy.data.node_groups.get("Internal rounder")
+            internal_rounder_modifier.node_group.use_fake_user = True
+            self.report({'INFO'}, f"Added Internal rounder Geometry Nodes modifier to {mesh.name}")
+
             weld_modifier = mesh.modifiers.new(name="Weld", type='WELD')
-            weld_modifier.merge_threshold = 1
+            weld_modifier.merge_threshold = .07
             self.report({'INFO'}, f"Added Weld modifier to {mesh.name}")
 
             clean_curves_modifier = mesh.modifiers.new(name="Clean_Curves", type='NODES')
             clean_curves_modifier.node_group = bpy.data.node_groups.get("Clean_Curves")
             clean_curves_modifier.node_group.use_fake_user = True
             self.report({'INFO'}, f"Added Clean_Curves Geometry Nodes modifier to {mesh.name}")
+
 
             bpy.ops.object.convert(target='MESH')
             self.report({'INFO'}, f"Applied all modifiers to {mesh.name}")
