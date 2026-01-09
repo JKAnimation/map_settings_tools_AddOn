@@ -24,6 +24,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
 
         self.load_node_group(blend_path, "Internal rounder")
         self.load_node_group(blend_path, "Clean_Curves")
+        self.load_node_group(blend_path, "Levels_Terrain")
 
         # -------------------------------------------------
         # BLOCKING
@@ -42,8 +43,8 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         if "Levels" in bpy.data.collections:
             self.process_collection(
                 collection=bpy.data.collections["Levels"],
-                final_obj_name="Levels_Help",
-                final_data_name="Levels",
+                final_obj_name="RoadHelp",
+                final_data_name="RoadMain",
                 create_road_help=False
             )
 
@@ -80,17 +81,19 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             # Vertex Group BEFORE modifiers
             self.create_vertex_group_for_mesh(mesh)
 
+            bpy.context.view_layer.update()
+
             self.add_decimate(mesh, 0.1)
             self.add_clean_curves(mesh)
             self.add_decimate(mesh, 3)
             self.add_decimate(mesh, 3)
-
             self.add_internal_rounder(mesh)
             self.add_clean_curves(mesh)
-
             self.add_weld(mesh)
+            self.add_clean_curves(mesh)
 
             bpy.ops.object.convert(target='MESH')
+
             bpy.context.view_layer.update()
 
             # Safe re-creation (GN already collapsed)
@@ -111,6 +114,21 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         joined = context.view_layer.objects.active
         joined.name = final_obj_name
         joined.data.name = final_data_name
+
+        # ----------------------------------
+        # LEVELS TERRAIN (solo para Levels)
+        # ----------------------------------
+        if final_obj_name == "RoadHelp":
+            self.add_levels_terrain(joined)
+
+            bpy.context.view_layer.update()
+
+            # Aplicar el GN (vertex groups ya no importan)
+            bpy.ops.object.select_all(action='DESELECT')
+            joined.select_set(True)
+            context.view_layer.objects.active = joined
+            bpy.ops.object.convert(target='MESH')
+
 
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
@@ -144,6 +162,11 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     def add_internal_rounder(self, mesh):
         mod = mesh.modifiers.new("Internal rounder", 'NODES')
         mod.node_group = bpy.data.node_groups["Internal rounder"]
+        mod.node_group.use_fake_user = True
+
+    def add_levels_terrain(self, mesh):
+        mod = mesh.modifiers.new("Levels_Terrain", 'NODES')
+        mod.node_group = bpy.data.node_groups["Levels_Terrain"]
         mod.node_group.use_fake_user = True
 
     def add_weld(self, mesh):
