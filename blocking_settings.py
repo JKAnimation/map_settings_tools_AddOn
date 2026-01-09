@@ -27,42 +27,30 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         self.load_node_group(blend_path, "Clean_Curves")
         self.load_node_group(blend_path, "Levels_Terrain")
 
-        # -------------------------------------------------
-        # RESET TERRAIN COLLECTION
-        # -------------------------------------------------
+        # --- CLEAN WORK & TERRAIN ---
+        self.clear_work_collection()
         terrain_col = self.reset_terrain_collection()
 
-        # -------------------------------------------------
-        # BLOCKING
-        # -------------------------------------------------
+        # --- BLOCKING ---
         if "Blocking" in bpy.data.collections:
             self.process_collection(
-                collection=bpy.data.collections["Blocking"],
+                source_collection=bpy.data.collections["Blocking"],
                 final_obj_name="Insides_Base",
                 final_data_name="Insides",
                 terrain_collection=terrain_col
             )
 
-        # -------------------------------------------------
-        # LEVELS
-        # -------------------------------------------------
+        # --- LEVELS ---
         if "Levels" in bpy.data.collections:
             self.process_collection(
-                collection=bpy.data.collections["Levels"],
+                source_collection=bpy.data.collections["Levels"],
                 final_obj_name="RoadHelp",
                 final_data_name="RoadMain",
                 terrain_collection=terrain_col
             )
 
-        # -------------------------------------------------
-        # RESTORE ORIGINAL NAMES (NO .001)
-        # -------------------------------------------------
-        self.restore_backup_names(
-            [
-                bpy.data.collections.get("Blocking"),
-                bpy.data.collections.get("Levels")
-            ]
-        )
+        # --- FINAL CLEAN ---
+        self.clear_work_collection()
 
         self.report({'INFO'}, "Blocking and Levels processed successfully")
         return {'FINISHED'}
@@ -72,60 +60,57 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
     # ---------------------------------------------------------
     def process_collection(
         self,
-        collection,
+        source_collection,
         final_obj_name,
         final_data_name,
         terrain_collection
     ):
 
-        meshes = [o for o in collection.all_objects if o.type == 'MESH']
-        if not meshes:
-            return
+        self.remove_final_result(final_obj_name, final_data_name)
 
+        work_col = self.get_work_collection()
         context = bpy.context
         processed = []
 
+        meshes = [o for o in source_collection.all_objects if o.type == 'MESH']
+        if not meshes:
+            return
+
         # ----------------------------------
-        # PROCESS EACH MESH
+        # DUPLICATE TO WORK & PROCESS
         # ----------------------------------
-        for mesh in meshes:
+        for src in meshes:
+            work = src.copy()
+            work.data = src.data.copy()
+            work_col.objects.link(work)
+
             bpy.ops.object.select_all(action='DESELECT')
-            mesh.select_set(True)
-            context.view_layer.objects.active = mesh
+            work.select_set(True)
+            context.view_layer.objects.active = work
 
-            # -------- BACKUP --------
-            backup = mesh.copy()
-            backup.data = mesh.data.copy()
-            backup["ORIGINAL_NAME"] = mesh.name
-            collection.objects.link(backup)
-
-            # Vertex Group BEFORE modifiers
-            self.create_vertex_group_for_mesh(mesh)
+            self.create_vertex_group_for_mesh(work)
             context.view_layer.update()
 
-            self.add_decimate(mesh, 0.1)
-            self.add_clean_curves(mesh)
-            self.add_decimate(mesh, 3)
-            self.add_decimate(mesh, 3)
-            self.add_internal_rounder(mesh)
-            self.add_clean_curves(mesh)
-            self.add_weld(mesh)
-            self.add_clean_curves(mesh)
+            self.add_decimate(work, 0.1)
+            self.add_clean_curves(work)
+            self.add_decimate(work, 3)
+            self.add_decimate(work, 3)
+            self.add_internal_rounder(work)
+            self.add_clean_curves(work)
+            self.add_weld(work)
+            self.add_clean_curves(work)
 
             bpy.ops.object.convert(target='MESH')
             context.view_layer.update()
 
-            # Safe re-creation
-            self.create_vertex_group_for_mesh(mesh)
-
-            processed.append(mesh)
+            processed.append(work)
 
         # ----------------------------------
-        # JOIN
+        # JOIN WORK OBJECTS
         # ----------------------------------
         bpy.ops.object.select_all(action='DESELECT')
-        for m in processed:
-            m.select_set(True)
+        for obj in processed:
+            obj.select_set(True)
 
         context.view_layer.objects.active = processed[0]
         bpy.ops.object.join()
@@ -135,7 +120,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         joined.data.name = final_data_name
 
         # ----------------------------------
-        # MOVE JOINED TO TERRAIN
+        # MOVE TO TERRAIN
         # ----------------------------------
         for col in joined.users_collection:
             col.objects.unlink(joined)
@@ -157,8 +142,22 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         self.add_color_attribute(joined)
 
     # ---------------------------------------------------------
-    # TERRAIN COLLECTION
+    # COLLECTION MANAGEMENT
     # ---------------------------------------------------------
+    def get_work_collection(self):
+        name = "__WORK_BLOCKING__"
+        if name not in bpy.data.collections:
+            col = bpy.data.collections.new(name)
+            bpy.context.scene.collection.children.link(col)
+        return bpy.data.collections[name]
+
+    def clear_work_collection(self):
+        col = bpy.data.collections.get("__WORK_BLOCKING__")
+        if not col:
+            return
+        for obj in list(col.objects):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
     def reset_terrain_collection(self):
         if "Terrain" in bpy.data.collections:
             col = bpy.data.collections["Terrain"]
@@ -170,20 +169,17 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         bpy.context.scene.collection.children.link(terrain_col)
         return terrain_col
 
-    # ---------------------------------------------------------
-    # RESTORE NAMES
-    # ---------------------------------------------------------
-    def restore_backup_names(self, collections):
-        for col in collections:
-            if not col:
-                continue
-            for obj in col.objects:
-                if "ORIGINAL_NAME" in obj:
-                    obj.name = obj["ORIGINAL_NAME"]
-                    del obj["ORIGINAL_NAME"]
+    def remove_final_result(self, obj_name, data_name):
+        obj = bpy.data.objects.get(obj_name)
+        if obj:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+        data = bpy.data.meshes.get(data_name)
+        if data and data.users == 0:
+            bpy.data.meshes.remove(data)
 
     # ---------------------------------------------------------
-    # HELPERS
+    # MODIFIERS & HELPERS
     # ---------------------------------------------------------
     def load_node_group(self, blend_path, name):
         if name not in bpy.data.node_groups:
@@ -218,17 +214,10 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         mod.merge_threshold = 0.07
 
     def create_vertex_group_for_mesh(self, mesh):
-        if mesh.name not in mesh.vertex_groups:
-            vg = mesh.vertex_groups.new(name=mesh.name)
-        else:
-            vg = mesh.vertex_groups[mesh.name]
-
+        vg = mesh.vertex_groups.new(name="ALL")
         indices = [v.index for v in mesh.data.vertices]
         vg.add(indices, 1.0, 'REPLACE')
 
-    # ---------------------------------------------------------
-    # EXTRAS
-    # ---------------------------------------------------------
     def add_color_attribute(self, obj):
         mesh = obj.data
         if "Green_C" not in mesh.color_attributes:
