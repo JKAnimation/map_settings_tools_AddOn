@@ -13,11 +13,8 @@ class VIEW3D_PT_map_setting_tools(bpy.types.Panel):
         # Opciones originales
         layout.operator("object.clean_figma_curves", text="Clean Figma Curves")
         layout.operator("object.standard_settings")
-        split = layout.split(factor=0.7)
-        col = split.column()
-        col.operator("object.blocking_settings")
-        col = split.column()
-        col.prop(context.scene, "create_road_help")
+        layout.operator("object.blocking_settings")
+
 
 class VIEW3D_PT_building_tools(bpy.types.Panel):
     bl_label = "Building Tools"
@@ -92,21 +89,26 @@ class VIEW3D_PT_procesar_mallas(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.procesar_coleccion_props
+        props = getattr(context.scene, "procesar_coleccion_props", None)
 
-        layout.prop(props, "usar_mesh_activa")
-        if not props.usar_mesh_activa:
-            layout.prop_search(props, "coleccion_target", bpy.data, "collections", text="Colección")
-        layout.operator("object.procesar_desde_coleccion", text="Procesar Geometría")
-
+        if props is not None:
+            layout.prop(props, "usar_mesh_activa")
+            if not getattr(props, "usar_mesh_activa", False):
+                layout.prop_search(props, "coleccion_target", bpy.data, "collections", text="Colección")
+            layout.operator("object.procesar_desde_coleccion", text="Procesar Geometría")
+        else:
+            layout.label(text="(Procesar mallas: props no disponibles)")
 
         layout.separator()
 
-
         layout.label(text="Actualizar FBX desde .blend:")
-        layout.prop(context.scene.actualizar_fbx_props, "ruta_blend")
-        layout.prop(context.scene.actualizar_fbx_props, "nombre_coleccion")
-        layout.operator("object.actualizar_coleccion_externa", icon="FILE_REFRESH")
+        actualizar_props = getattr(context.scene, "actualizar_fbx_props", None)
+        if actualizar_props is not None:
+            layout.prop(actualizar_props, "ruta_blend")
+            layout.prop(actualizar_props, "nombre_coleccion")
+            layout.operator("object.actualizar_coleccion_externa", icon="FILE_REFRESH")
+        else:
+            layout.label(text="(Actualizar FBX: props no disponibles)")
 
 class VIEW3D_PT_collection_list_tools(bpy.types.Panel):
     bl_label = "Collection list generator"

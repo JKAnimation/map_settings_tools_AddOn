@@ -44,17 +44,6 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
             recenter_collection_to_r_center(active_collection)
 
         # --------------------------------------------------
-        # BACKUP DE R_EXTERNAL (ANTES DE RENOMBRAR)
-        # --------------------------------------------------
-
-        external_backup = None
-        external_obj = bpy.data.objects.get("R_External")
-
-        if external_obj:
-            external_backup = external_obj.copy()
-            external_backup.data = external_obj.data.copy()
-
-        # --------------------------------------------------
         # BLOCKING
         # --------------------------------------------------
 
@@ -62,14 +51,12 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
             "R_Land": "Special",
             "R_Green": "Green",
             "R_River": "River",
-            "R_Street": "Street",
-            "R_External": "Ext"
+            "R_Street": "Street"
         }
 
         create_named_collection_from_sources(
             source_map=blocking_sources,
             target_collection_name="Blocking",
-            duplicate_sources=None,
             require_any=True
         )
 
@@ -81,14 +68,13 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
             "R_Lvl1": "Lvl1",
             "R_Lvl2": "Lvl2",
             "R_Lvl3": "Lvl3",
+            "R_External": "Lvl0"
         }
 
         create_named_collection_from_sources(
             source_map=level_sources,
             target_collection_name="Levels",
-            duplicate_sources={"__EXTERNAL_BACKUP__": "Lvl0"},
-            require_any=True,
-            external_backup=external_backup
+            require_any=True
         )
 
         self.report({'INFO'}, f"Clean Figma Curves finished for '{active_collection.name}'")
@@ -175,9 +161,7 @@ def recenter_collection_to_r_center(collection):
 def create_named_collection_from_sources(
     source_map,
     target_collection_name,
-    duplicate_sources=None,
-    require_any=True,
-    external_backup=None
+    require_any=True
 ):
     found_sources = [
         obj for name in source_map
@@ -215,28 +199,6 @@ def create_named_collection_from_sources(
 
         new_col.objects.link(obj)
         obj.select_set(False)
-
-    # --------------------------------------------------
-    # DUPLICADOS
-    # --------------------------------------------------
-
-    if duplicate_sources:
-        for src_name, dup_name in duplicate_sources.items():
-
-            if src_name == "__EXTERNAL_BACKUP__":
-                src = external_backup
-            else:
-                src = bpy.data.objects.get(src_name)
-
-            if not src:
-                continue
-
-            dup = src.copy()
-            dup.data = src.data.copy()
-            dup.name = dup_name
-            dup.data.name = dup_name
-
-            new_col.objects.link(dup)
 
 
 # ------------------------------------------------------------
