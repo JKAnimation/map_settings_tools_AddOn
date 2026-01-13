@@ -27,7 +27,7 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         self.load_node_group(blend_path, "Clean_Curves")
         self.load_node_group(blend_path, "Levels_Terrain")
 
-        # --- CLEAN WORK & TERRAIN ---
+        # --- CLEAN PREVIOUS RESULTS ---
         self.clear_work_collection()
         terrain_col = self.reset_terrain_collection()
 
@@ -68,8 +68,8 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
 
         self.remove_final_result(final_obj_name, final_data_name)
 
-        work_col = self.get_work_collection()
         context = bpy.context
+        work_col = self.get_work_collection()
         processed = []
 
         meshes = [o for o in source_collection.all_objects if o.type == 'MESH']
@@ -77,9 +77,10 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             return
 
         # ----------------------------------
-        # DUPLICATE TO WORK & PROCESS
+        # DUPLICATE & PROCESS EACH MESH
         # ----------------------------------
         for src in meshes:
+
             work = src.copy()
             work.data = src.data.copy()
             work_col.objects.link(work)
@@ -88,9 +89,11 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             work.select_set(True)
             context.view_layer.objects.active = work
 
-            self.create_vertex_group_for_mesh(work)
+            # -------- FIRST VERTEX GROUP (FOR GN) --------
+            self.create_vertex_group_named(work, src.name)
             context.view_layer.update()
 
+            # -------- MODIFIERS --------
             self.add_decimate(work, 0.1)
             self.add_clean_curves(work)
             self.add_decimate(work, 3)
@@ -100,13 +103,21 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
             self.add_weld(work)
             self.add_clean_curves(work)
 
+            # -------- APPLY MODIFIERS --------
             bpy.ops.object.convert(target='MESH')
             context.view_layer.update()
+
+            # 🔥 CRITICAL PART 🔥
+            # Old groups are now invalid
+            work.vertex_groups.clear()
+
+            # -------- FINAL VERTEX GROUP (FOR JOIN) --------
+            self.create_vertex_group_named(work, src.name)
 
             processed.append(work)
 
         # ----------------------------------
-        # JOIN WORK OBJECTS
+        # JOIN
         # ----------------------------------
         bpy.ops.object.select_all(action='DESELECT')
         for obj in processed:
@@ -213,11 +224,14 @@ class OBJECT_OT_blocking_settings(bpy.types.Operator):
         mod = mesh.modifiers.new("Weld", 'WELD')
         mod.merge_threshold = 0.07
 
-    def create_vertex_group_for_mesh(self, mesh):
-        vg = mesh.vertex_groups.new(name="ALL")
+    def create_vertex_group_named(self, mesh, name):
+        vg = mesh.vertex_groups.new(name=name)
         indices = [v.index for v in mesh.data.vertices]
         vg.add(indices, 1.0, 'REPLACE')
 
+    # ---------------------------------------------------------
+    # EXTRAS
+    # ---------------------------------------------------------
     def add_color_attribute(self, obj):
         mesh = obj.data
         if "Green_C" not in mesh.color_attributes:
