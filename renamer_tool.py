@@ -1,6 +1,6 @@
 import bpy
 from bpy.types import PropertyGroup, Operator, UIList
-from bpy.props import StringProperty, IntProperty, CollectionProperty, PointerProperty
+from bpy.props import StringProperty, IntProperty, CollectionProperty, PointerProperty, BoolProperty
 
 class RenameItem(PropertyGroup):
     """Almacena el nombre actual y el nuevo nombre de un objeto"""
@@ -45,19 +45,46 @@ class RENAMER_OT_autofill(Operator):
     bl_label = "Auto-fill Names"
     bl_options = {'REGISTER', 'UNDO'}
     
+    preserve_base: BoolProperty(
+        name="Preserve Base Name",
+        default=True,
+        description="Keep the original base name and only add prefix/suffix"
+    )
+    
     def execute(self, context):
         scene = context.scene
         base_name = scene.renamer_base_name
         prefix = scene.renamer_prefix
         suffix = scene.renamer_suffix
         start_number = scene.renamer_start_number
+        zero_padding = scene.renamer_zero_padding
+        auto_underscore = scene.renamer_auto_underscore
+        
+        # Procesar prefijo y sufijo con auto-guion bajo
+        if auto_underscore:
+            if prefix and not prefix.endswith('_'):
+                prefix = prefix + '_'
+            if suffix and not suffix.startswith('_'):
+                suffix = '_' + suffix
         
         for i, item in enumerate(scene.renamer_items, start_number):
-            current_base = base_name if base_name.strip() else item.old_name
+            if self.preserve_base:
+                # Conservar el nombre base original
+                current_base = item.old_name if not base_name.strip() else base_name
+            else:
+                # Usar el base_name proporcionado
+                current_base = base_name if base_name.strip() else item.old_name
+            
+            # Construir nombre base
             item.new_name = f"{prefix}{current_base}{suffix}"
             
+            # Agregar número si hay múltiples objetos
             if len(scene.renamer_items) > 1:
-                item.new_name = f"{prefix}{current_base}{suffix}_{i:03d}"
+                if zero_padding > 0:
+                    number_str = str(i).zfill(zero_padding)
+                else:
+                    number_str = str(i)
+                item.new_name = f"{prefix}{current_base}{suffix}_{number_str}"
                 
         return {'FINISHED'}
 
@@ -67,18 +94,45 @@ class RENAMER_OT_execute(Operator):
     bl_label = "Apply Rename"
     bl_options = {'REGISTER', 'UNDO'}
     
+    preserve_base: BoolProperty(
+        name="Preserve Base Name",
+        default=True,
+        description="Keep the original base name and only add/remove prefix/suffix"
+    )
+    
     def execute(self, context):
         scene = context.scene
-        renamed = 0
+        prefix = scene.renamer_prefix
+        suffix = scene.renamer_suffix
+        auto_underscore = scene.renamer_auto_underscore
+        
+        # Procesar prefijo y sufijo con auto-guion bajo
+        if auto_underscore:
+            if prefix and not prefix.endswith('_'):
+                prefix = prefix + '_'
+            if suffix and not suffix.startswith('_'):
+                suffix = '_' + suffix
         
         for item in scene.renamer_items:
-            if item.obj_ref and item.new_name and item.obj_ref.name != item.new_name:
-                item.obj_ref.name = item.new_name
-                if item.obj_ref.data:
-                    item.obj_ref.data.name = item.new_name
-                renamed += 1
-                
-        self.report({'INFO'}, f"Renombrados {renamed} objetos")
+            if self.preserve_base:
+                # Conservar el nombre base original
+                base_name = item.old_name
+                # Remover prefijo y sufijo existentes del nombre original
+                if prefix and base_name.startswith(prefix):
+                    base_name = base_name[len(prefix):]
+                if suffix and base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                # Aplicar nuevo prefijo y sufijo
+                item.new_name = f"{prefix}{base_name}{suffix}"
+            else:
+                # Usar el nombre actual como base
+                base_name = item.new_name
+                if prefix and base_name.startswith(prefix):
+                    base_name = base_name[len(prefix):]
+                if suffix and base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                item.new_name = f"{prefix}{base_name}{suffix}"
+            
         return {'FINISHED'}
 
 class RENAMER_OT_populate(Operator):
@@ -177,19 +231,44 @@ class RENAMER_OT_apply_prefix_suffix(Operator):
     bl_label = "Apply Prefix/Suffix"
     bl_options = {'REGISTER', 'UNDO'}
     
+    preserve_base: BoolProperty(
+        name="Preserve Base Name",
+        default=True,
+        description="Keep the original base name and only add/remove prefix/suffix"
+    )
+    
     def execute(self, context):
         scene = context.scene
         prefix = scene.renamer_prefix
         suffix = scene.renamer_suffix
+        auto_underscore = scene.renamer_auto_underscore
+        
+        # Procesar prefijo y sufijo con auto-guion bajo
+        if auto_underscore:
+            if prefix and not prefix.endswith('_'):
+                prefix = prefix + '_'
+            if suffix and not suffix.startswith('_'):
+                suffix = '_' + suffix
         
         for item in scene.renamer_items:
-            base_name = item.old_name
-            if prefix and item.old_name.startswith(prefix):
-                base_name = item.old_name[len(prefix):]
-            if suffix and item.old_name.endswith(suffix):
-                base_name = base_name[:-len(suffix)]
-                
-            item.new_name = f"{prefix}{base_name}{suffix}"
+            if self.preserve_base:
+                # Conservar el nombre base original
+                base_name = item.old_name
+                # Remover prefijo y sufijo existentes del nombre original
+                if prefix and base_name.startswith(prefix):
+                    base_name = base_name[len(prefix):]
+                if suffix and base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                # Aplicar nuevo prefijo y sufijo
+                item.new_name = f"{prefix}{base_name}{suffix}"
+            else:
+                # Usar el nombre actual como base
+                base_name = item.new_name
+                if prefix and base_name.startswith(prefix):
+                    base_name = base_name[len(prefix):]
+                if suffix and base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                item.new_name = f"{prefix}{base_name}{suffix}"
             
         return {'FINISHED'}
 
@@ -216,10 +295,21 @@ renamer_properties = {
     'renamer_prefix': bpy.props.StringProperty(name="Prefix", default=""),
     'renamer_suffix': bpy.props.StringProperty(name="Suffix", default=""),
     'renamer_start_number': bpy.props.IntProperty(name="Start Number", default=1, min=0),
+    'renamer_zero_padding': bpy.props.IntProperty(name="Zero Padding", default=2, min=0, max=10, description="Number of zeros for padding (0=no padding, 2=01, 3=001, etc.)"),
+    'renamer_auto_underscore': bpy.props.BoolProperty(
+        name="Auto Underscore",
+        default=True,
+        description="Automatically add underscore after prefix and before suffix"
+    ),
     'renamer_collection': bpy.props.StringProperty(name="Collection"),
     'renamer_clear_on_populate': bpy.props.BoolProperty(
         name="Clear List First", 
         default=True,
         description="Clear the list before populating with new items"
+    ),
+    'renamer_preserve_base': bpy.props.BoolProperty(
+        name="Preserve Base Name",
+        default=True,
+        description="Keep the original base name and only modify prefix/suffix"
     )
 }

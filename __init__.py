@@ -35,6 +35,8 @@ module_names = [
     "procesar_mallas",
     # actualizar FBX externo
     "actualizar_coleccion_externa",
+    # renamer tool
+    "renamer_tool",
     # paneles
     "menu",
 ]
@@ -131,13 +133,43 @@ def register_properties():
             except Exception:
                 print("[MapSettingTools] Warning: no se pudo crear actualizar_fbx_props")
 
+    # Renamer tool props
+    renamer_mod = modules.get("renamer_tool")
+    if renamer_mod and hasattr(bpy.types.Scene, "renamer_items") is False:
+        if hasattr(renamer_mod, "renamer_properties"):
+            try:
+                for prop_name, prop_value in getattr(renamer_mod, "renamer_properties").items():
+                    if not hasattr(bpy.types.Scene, prop_name):
+                        setattr(bpy.types.Scene, prop_name, prop_value)
+            except Exception:
+                print("[MapSettingTools] Warning: no se pudo crear propiedades del renamer")
+
+    # Apply Active Collection props
+    if not hasattr(bpy.types.Scene, "apply_activecollection_make_data_single"):
+        bpy.types.Scene.apply_activecollection_make_data_single = bpy.props.BoolProperty(
+            name="Make Data Single",
+            default=False,
+            description="Make objects independent by making their data single user and reset scale"
+        )
+
 
 def unregister_properties():
-    for p in (
+    # Base properties
+    base_props = [
         "export_folder", "create_road_help", "split_collection", "entrances_collection",
         "export_csv_path", "my_objects", "my_objects_index", "procesar_coleccion_props",
-        "actualizar_fbx_props"
-    ):
+        "actualizar_fbx_props", "apply_activecollection_make_data_single"
+    ]
+    
+    # Renamer properties
+    renamer_mod = modules.get("renamer_tool")
+    if renamer_mod and hasattr(renamer_mod, "renamer_properties"):
+        renamer_props = list(getattr(renamer_mod, "renamer_properties").keys())
+        all_props = base_props + renamer_props
+    else:
+        all_props = base_props
+    
+    for p in all_props:
         if hasattr(bpy.types.Scene, p):
             try:
                 delattr(bpy.types.Scene, p)

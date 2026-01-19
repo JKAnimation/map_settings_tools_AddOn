@@ -49,6 +49,9 @@ class VIEW3D_PT_set_dressing_tools(bpy.types.Panel):
         row.operator("object.apply_activecollection_sys")
         row.operator("object.clean_setdressing_collections")
         layout.prop(context.scene, "split_collection")
+        
+        # Agregar checkbox para Make Data Single
+        layout.prop(context.scene, "apply_activecollection_make_data_single", text="Make Data Single")
 
         layout.label(text="Node tools")
         row = layout.row(align=True)
@@ -131,3 +134,60 @@ class VIEW3D_PT_collection_list_tools(bpy.types.Panel):
         
         layout.template_list("OBJECT_UL_custom_list", "", context.scene, "my_objects", context.scene, "my_objects_index")
         layout.operator("object.apply_order", text="Apply Order and Duplicate")
+
+class VIEW3D_PT_renamer_tools(bpy.types.Panel):
+    bl_label = "Renamer Tool"
+    bl_idname = "VIEW3D_PT_renamer_tools"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Map Setting Tools'
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        # Botones para poblar la lista
+        row = layout.row(align=True)
+        row.operator("renamer.populate", text="Update Selection")
+        row.operator("renamer.populate_collection", text="Add from Collection")
+        
+        layout.prop(scene, "renamer_clear_on_populate")
+        
+        layout.separator()
+        
+        # Lista de objetos
+        layout.template_list("RENAMER_UL_items", "", scene, "renamer_items", scene, "renamer_items_index")
+        
+        # Controles de mover items
+        row = layout.row(align=True)
+        row.operator("renamer.move_item", text="", icon='TRIA_UP').direction = 'UP'
+        row.operator("renamer.move_item", text="", icon='TRIA_DOWN').direction = 'DOWN'
+        
+        layout.separator()
+        
+        # Herramientas de renombrado
+        box = layout.box()
+        box.label(text="Prefix/Suffix Tools:")
+        box.prop(scene, "renamer_prefix")
+        box.prop(scene, "renamer_suffix")
+        box.prop(scene, "renamer_auto_underscore")
+        box.prop(scene, "renamer_preserve_base")
+        box.operator("renamer.apply_prefix_suffix", text="Apply Prefix/Suffix")
+        
+        box = layout.box()
+        box.label(text="Find & Replace:")
+        row = box.row(align=True)
+        row.prop(scene, "renamer_find", text="Find:")
+        row.prop(scene, "renamer_replace", text="Replace:")
+        box.operator("renamer.find_replace", text="Find & Replace")
+        
+        box = layout.box()
+        box.label(text="Auto-fill:")
+        box.prop(scene, "renamer_base_name")
+        row = box.row(align=True)
+        row.prop(scene, "renamer_start_number")
+        row.prop(scene, "renamer_zero_padding")
+        box.operator("renamer.autofill", text="Auto-fill Names")
+        
+        layout.separator()
+        layout.operator("renamer.execute_rename", text="Apply Rename")

@@ -38,7 +38,7 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
         # --------------------------------------------------
 
         transform_and_convert_objects(objects_to_keep)
-        apply_decimate_planar()
+        apply_subdivision_and_decimate()
 
         if any(obj.name.startswith("R_Center") for obj in active_collection.objects):
             recenter_collection_to_r_center(active_collection)
@@ -116,17 +116,28 @@ def transform_and_convert_objects(objects):
         obj.select_set(False)
 
 
-def apply_decimate_planar():
+def apply_subdivision_and_decimate():
     angle_limit = math.radians(1)
     for obj in list(bpy.data.objects):
         if obj.type == 'MESH':
-            mod = obj.modifiers.new("DecimatePlanar", 'DECIMATE')
-            mod.decimate_type = 'DISSOLVE'
-            mod.angle_limit = angle_limit
-
+            # Agregar Subdivision Surface primero
+            subdiv_mod = obj.modifiers.new("Subdivision", 'SUBSURF')
+            subdiv_mod.subdivision_type = 'SIMPLE'
+            subdiv_mod.levels = 1
+            subdiv_mod.render_levels = 1
+            
+            # Aplicar subdivisión
             bpy.context.view_layer.objects.active = obj
             obj.select_set(True)
-            bpy.ops.object.modifier_apply(modifier=mod.name)
+            bpy.ops.object.modifier_apply(modifier=subdiv_mod.name)
+            
+            # Luego agregar Decimate Planar
+            decimate_mod = obj.modifiers.new("DecimatePlanar", 'DECIMATE')
+            decimate_mod.decimate_type = 'DISSOLVE'
+            decimate_mod.angle_limit = angle_limit
+
+            # Aplicar decimate
+            bpy.ops.object.modifier_apply(modifier=decimate_mod.name)
             obj.select_set(False)
 
 
