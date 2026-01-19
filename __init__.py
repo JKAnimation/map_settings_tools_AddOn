@@ -9,10 +9,23 @@ bl_info = {
 import bpy
 import importlib
 import traceback
+from bpy.types import Operator, Panel, PropertyGroup
+from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, PointerProperty
 
-# -------------------------------------------------------------------
-# Lista de nombres de módulos que usa tu menú (añade/quita si hace falta)
-# -------------------------------------------------------------------
+# Import renamer tool classes
+from .renamer_tool import (
+    RenamerItem,
+    RENAMER_UL_items,
+    RENAMER_OT_populate,
+    RENAMER_OT_clear,
+    RENAMER_OT_find_replace,
+    RENAMER_OT_apply_prefix_suffix,
+    RENAMER_OT_autofill,
+    RENAMER_OT_move_item,
+    RENAMER_OT_execute
+)
+
+# Lista de nombres de módulos
 module_names = [
     "import_fbx_to_collections",
     "rename_plates",
@@ -27,185 +40,176 @@ module_names = [
     "clean_figma_curves",
     "export_buildings_fbx",
     "generate_csv_report",
-    # geometry nodes module (varios operadores dentro)
     "load_geometry_nodes",
-    # orden / UI list
     "object_order_tools",
-    # procesar mallas
     "procesar_mallas",
-    # actualizar FBX externo
     "actualizar_coleccion_externa",
-    # renamer tool
     "renamer_tool",
-    # paneles
     "menu",
 ]
 
-# -------------------------------------------------------------------
-# Intentar importar todos los módulos; si falla, seguir (mostrar error)
-# -------------------------------------------------------------------
+# Inicializar diccionario de módulos
 modules = {}
-for name in module_names:
-    try:
-        modules[name] = importlib.import_module(f".{name}", package=__package__)
-    except Exception:
-        print(f"[MapSettingTools] ERROR importando módulo '{name}':\n{traceback.format_exc()}")
-
-# -------------------------------------------------------------------
-# Colección dinámica de clases a registrar
-# - Buscamos en cada módulo clases que sean subclass de tipos Blender:
-#   Operator, Panel, PropertyGroup, UIList
-# -------------------------------------------------------------------
 classes = []
 
-_bl_types = (bpy.types.Operator, bpy.types.Panel, bpy.types.PropertyGroup, bpy.types.UIList)
+# Cargar dinámicamente todos los módulos
+for module_name in module_names:
+    try:
+        module = importlib.import_module(f".{module_name}", package=__package__)
+        modules[module_name] = module
+        importlib.reload(module)
+        
+        # Recolectar clases
+        for item in dir(module):
+            item_obj = getattr(module, item)
+            if hasattr(item_obj, 'bl_rna') and issubclass(item_obj, (bpy.types.Operator, bpy.types.Panel, bpy.types.PropertyGroup)):
+                globals()[item] = item_obj
+                if item_obj not in classes:
+                    classes.append(item_obj)
+                    
+    except Exception as e:
+        print(f"Error importing {module_name}: {str(e)}")
+        traceback.print_exc()
 
-for mod_name, mod in modules.items():
-    for attr_name in dir(mod):
-        attr = getattr(mod, attr_name)
-        try:
-            if isinstance(attr, type):
-                # evitar registrar clases internas o clases ajenas
-                if issubclass(attr, _bl_types) and attr.__module__ == mod.__name__:
-                    classes.append(attr)
-        except Exception:
-            # issubclass puede fallar si attr no es clase; ignorar
-            pass
+# Asegurar que las clases del renamer estén incluidas
+renamer_classes = [
+    RenamerItem,
+    RENAMER_UL_items,
+    RENAMER_OT_populate,
+    RENAMER_OT_clear,
+    RENAMER_OT_find_replace,
+    RENAMER_OT_apply_prefix_suffix,
+    RENAMER_OT_autofill,
+    RENAMER_OT_move_item,
+    RENAMER_OT_execute
+]
 
-# El módulo 'menu' puede definir Panels con nombres distintos; nos aseguramos de incluirlos también
-# (están recogidos por el bucle anterior si existen)
+for cls in renamer_classes:
+    if cls not in classes:
+        classes.append(cls)
 
-# -------------------------------------------------------------------
-# Registrar propiedades de Scene (solo si existen dependencias)
-# -------------------------------------------------------------------
 def register_properties():
-    # propiedades simples (si no existen ya)
+    # Propiedades base
     if not hasattr(bpy.types.Scene, "export_folder"):
         bpy.types.Scene.export_folder = bpy.props.StringProperty(
-            name="Export Folder", description="Selecciona la carpeta para exportar los archivos FBX", subtype='DIR_PATH'
+            name="Export Folder",
+            subtype='DIR_PATH',
+            default=""
         )
-
-    if not hasattr(bpy.types.Scene, "create_road_help"):
-        bpy.types.Scene.create_road_help = bpy.props.BoolProperty(
-            name="Road", description="Generar malla RoadHelp", default=True
+    
+    # Propiedades del renamer
+    if not hasattr(bpy.types.Scene, "renamer_items"):
+        bpy.types.Scene.renamer_items = bpy.props.CollectionProperty(type=RenamerItem)
+        bpy.types.Scene.renamer_active_index = bpy.props.IntProperty()
+        bpy.types.Scene.renamer_clear_on_populate = bpy.props.BoolProperty(
+            name="Clear on Populate", 
+            default=True
         )
-
-    # split_collection y entrances_collection son Pointer a Collection (siempre válidos)
+        bpy.types.Scene.renamer_find = bpy.props.StringProperty(name="Find")
+        bpy.types.Scene.renamer_replace = bpy.props.StringProperty(name="Replace")
+        bpy.types.Scene.renamer_prefix = bpy.props.StringProperty(name="Prefix")
+        bpy.types.Scene.renamer_suffix = bpy.props.StringProperty(name="Suffix")
+        bpy.types.Scene.renamer_auto_underscore = bpy.props.BoolProperty(
+            name="Auto Underscore", 
+            default=True
+        )
+        bpy.types.Scene.renamer_preserve_base = bpy.props.BoolProperty(
+            name="Preserve Base Name", 
+            default=False
+        )
+        bpy.types.Scene.renamer_base_name = bpy.props.StringProperty(name="Base Name")
+        bpy.types.Scene.renamer_start_number = bpy.props.IntProperty(
+            name="Start Number", 
+            default=1, 
+            min=0
+        )
+        bpy.types.Scene.renamer_zero_padding = bpy.props.IntProperty(
+            name="Digits", 
+            default=2, 
+            min=1, 
+            max=5
+        )
+    
+    # Otras propiedades
     if not hasattr(bpy.types.Scene, "split_collection"):
         bpy.types.Scene.split_collection = bpy.props.PointerProperty(
-            type=bpy.types.Collection, name="Split collection", description="Seleccionar una colección para almacenar instancias"
+            type=bpy.types.Collection,
+            name="Target Collection",
+            description="Collection where objects will be moved"
         )
-
-    if not hasattr(bpy.types.Scene, "entrances_collection"):
-        bpy.types.Scene.entrances_collection = bpy.props.PointerProperty(
-            type=bpy.types.Collection, name="Entrances collection", description="Seleccionar una colección para montar las entradas de los landmarks"
-        )
-
-    if not hasattr(bpy.types.Scene, "export_csv_path"):
-        bpy.types.Scene.export_csv_path = bpy.props.StringProperty(
-            name="Export CSV Path", default="//", subtype='DIR_PATH'
-        )
-
-    # Props que dependen de módulos externos: object_order_tools.ObjectListItem
-    obj_order_mod = modules.get("object_order_tools")
-    if obj_order_mod and hasattr(bpy.types.Scene, "my_objects") is False:
-        try:
-            bpy.types.Scene.my_objects = bpy.props.CollectionProperty(type=getattr(obj_order_mod, "ObjectListItem"))
-            bpy.types.Scene.my_objects_index = bpy.props.IntProperty()
-        except Exception:
-            print("[MapSettingTools] Warning: no se pudo crear Scene.my_objects (ObjectListItem no disponible)")
-
-    # Procesar mallas props
-    procesar_mod = modules.get("procesar_mallas")
-    if procesar_mod and hasattr(bpy.types.Scene, "procesar_coleccion_props") is False:
-        if hasattr(procesar_mod, "ProcesarDuplicadorProps"):
-            try:
-                bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=getattr(procesar_mod, "ProcesarDuplicadorProps"))
-            except Exception:
-                print("[MapSettingTools] Warning: no se pudo crear procesar_coleccion_props")
-
-    # Actualizar FBX externo props
-    actual_mod = modules.get("actualizar_coleccion_externa")
-    if actual_mod and hasattr(bpy.types.Scene, "actualizar_fbx_props") is False:
-        if hasattr(actual_mod, "ActualizarFBXProps"):
-            try:
-                bpy.types.Scene.actualizar_fbx_props = bpy.props.PointerProperty(type=getattr(actual_mod, "ActualizarFBXProps"))
-            except Exception:
-                print("[MapSettingTools] Warning: no se pudo crear actualizar_fbx_props")
-
-    # Renamer tool props
-    renamer_mod = modules.get("renamer_tool")
-    if renamer_mod and hasattr(bpy.types.Scene, "renamer_items") is False:
-        if hasattr(renamer_mod, "renamer_properties"):
-            try:
-                for prop_name, prop_value in getattr(renamer_mod, "renamer_properties").items():
-                    if not hasattr(bpy.types.Scene, prop_name):
-                        setattr(bpy.types.Scene, prop_name, prop_value)
-            except Exception:
-                print("[MapSettingTools] Warning: no se pudo crear propiedades del renamer")
-
-    # Apply Active Collection props
-    if not hasattr(bpy.types.Scene, "apply_activecollection_make_data_single"):
         bpy.types.Scene.apply_activecollection_make_data_single = bpy.props.BoolProperty(
-            name="Make Data Single",
-            default=False,
-            description="Make objects independent by making their data single user and reset scale"
+            name="Make Single User",
+            default=True,
+            description="Make objects single user (duplicate data)"
         )
-
+        bpy.types.Scene.split_geometry = bpy.props.BoolProperty(
+            name="Process Only Selected",
+            default=False,
+            description="Only process selected objects instead of the entire collection"
+        )
 
 def unregister_properties():
-    # Base properties
+    # Propiedades base
     base_props = [
         "export_folder", "create_road_help", "split_collection", "entrances_collection",
         "export_csv_path", "my_objects", "my_objects_index", "procesar_coleccion_props",
         "actualizar_fbx_props", "apply_activecollection_make_data_single"
     ]
     
-    # Renamer properties
-    renamer_mod = modules.get("renamer_tool")
-    if renamer_mod and hasattr(renamer_mod, "renamer_properties"):
-        renamer_props = list(getattr(renamer_mod, "renamer_properties").keys())
-        all_props = base_props + renamer_props
-    else:
-        all_props = base_props
+    # Propiedades del renamer
+    renamer_props = [
+        "renamer_items",
+        "renamer_active_index",
+        "renamer_clear_on_populate",
+        "renamer_find",
+        "renamer_replace",
+        "renamer_prefix",
+        "renamer_suffix",
+        "renamer_auto_underscore",
+        "renamer_preserve_base",
+        "renamer_base_name",
+        "renamer_start_number",
+        "renamer_zero_padding"
+    ]
     
-    for p in all_props:
-        if hasattr(bpy.types.Scene, p):
+    # Combinar todas las propiedades
+    all_props = base_props + renamer_props
+    
+    # Eliminar propiedades
+    for prop_name in all_props:
+        if hasattr(bpy.types.Scene, prop_name):
             try:
-                delattr(bpy.types.Scene, p)
-            except Exception:
-                pass
+                delattr(bpy.types.Scene, prop_name)
+            except Exception as e:
+                print(f"Warning: Could not remove property {prop_name}: {str(e)}")
 
-# -------------------------------------------------------------------
-# Registro principal
-# -------------------------------------------------------------------
 def register():
-    # registrar clases en el orden encontrado
+    # Registrar clases
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-        except Exception:
-            print(f"[MapSettingTools] ERROR registrando {cls}:")
+        except Exception as e:
+            print(f"Error registrando {cls}: {e}")
             traceback.print_exc()
-
-    # propiedades
+    
+    # Registrar propiedades
     register_properties()
-
-    print("[MapSettingTools] registrado. Clases registradas:", len(classes))
-
+    
+    print(f"[Map Setting Tools] {len(classes)} clases registradas")
 
 def unregister():
+    # Desregistrar propiedades
     unregister_properties()
-
+    
+    # Desregistrar clases en orden inverso
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
-        except Exception:
-            print(f"[MapSettingTools] ERROR desregistrando {cls}:")
+        except Exception as e:
+            print(f"Error desregistrando {cls}: {e}")
             traceback.print_exc()
-
-    print("[MapSettingTools] desregistrado.")
-
+    
+    print("[Map Setting Tools] Desregistrado")
 
 if __name__ == "__main__":
     register()

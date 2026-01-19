@@ -36,7 +36,7 @@ class VIEW3D_PT_building_tools(bpy.types.Panel):
         layout.prop(context.scene, "export_csv_path", text="Ruta Exportación")
 
 class VIEW3D_PT_set_dressing_tools(bpy.types.Panel):
-    bl_label = "Set dressing Tools"
+    bl_label = "Set Dressing Tools"
     bl_idname = "VIEW3D_PT_set_dressing_tools"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -44,27 +44,40 @@ class VIEW3D_PT_set_dressing_tools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
 
-        row = layout.row(align=True)
-        row.operator("object.apply_activecollection_sys")
-        row.operator("object.clean_setdressing_collections")
-        layout.prop(context.scene, "split_collection")
+        # Main operator with clean button
+        box = layout.box()
+        row = box.row(align=True)
+        row.operator("object.apply_activecollection_sys", text="Split Collection")
+        row.operator("object.clean_setdressing_collections", text="", icon='TRASH')
         
-        # Agregar checkbox para Make Data Single
-        layout.prop(context.scene, "apply_activecollection_make_data_single", text="Make Data Single")
+        # Collection selection
+        box.prop(scene, "split_collection", text="Target")
+        
+        # Options
+        col = box.column(align=True)
+        col.prop(scene, "apply_activecollection_make_data_single", text="Make Single User")
+        col.prop(scene, "split_geometry", text="Process Only Selected")
 
-        layout.label(text="Node tools")
-        row = layout.row(align=True)
+        # Node tools section
+        box = layout.box()
+        box.label(text="Node Tools")
+        
+        # First row of node tools
+        row = box.row(align=True)
         row.operator("object.load_landmark_plates", text="Land Facades", icon='HOME')
         row.operator("object.load_multisnap", text="Z Snap", icon='SNAP_ON')
         row.operator("object.load_edge_distribution", text="Edge Dist", icon='SEQ_LUMA_WAVEFORM')
 
-        row = layout.row(align=True)
+        # Second row of node tools
+        row = box.row(align=True)
         row.operator("object.area_distribution", text="Area Dist")
         row.operator("object.post_flags", text="Post Flags", icon='BOOKMARKS')
-        row.operator("object.clean_nearest", text="Clean Nearest", icon='BRUSH_DATA')
+        row.operator("object.clean_nearest", text="Clean", icon='BRUSH_DATA')
 
-        row = layout.row(align=True)
+        # Third row of node tools
+        row = box.row(align=True)
         row.operator("object.road_paths", text="Road Paths", icon='TRACKING')
         row.operator("object.flat_borders", text="Flat Borders", icon='MOD_OUTLINE')
 
@@ -141,53 +154,118 @@ class VIEW3D_PT_renamer_tools(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Map Setting Tools'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
 
-        # Botones para poblar la lista
-        row = layout.row(align=True)
-        row.operator("renamer.populate", text="Update Selection")
-        row.operator("renamer.populate_collection", text="Add from Collection")
-        
-        layout.prop(scene, "renamer_clear_on_populate")
-        
-        layout.separator()
-        
-        # Lista de objetos
-        layout.template_list("RENAMER_UL_items", "", scene, "renamer_items", scene, "renamer_items_index")
-        
-        # Controles de mover items
-        row = layout.row(align=True)
-        row.operator("renamer.move_item", text="", icon='TRIA_UP').direction = 'UP'
-        row.operator("renamer.move_item", text="", icon='TRIA_DOWN').direction = 'DOWN'
-        
-        layout.separator()
-        
-        # Herramientas de renombrado
+        # 1. Populate Section
         box = layout.box()
-        box.label(text="Prefix/Suffix Tools:")
-        box.prop(scene, "renamer_prefix")
-        box.prop(scene, "renamer_suffix")
-        box.prop(scene, "renamer_auto_underscore")
-        box.prop(scene, "renamer_preserve_base")
-        box.operator("renamer.apply_prefix_suffix", text="Apply Prefix/Suffix")
-        
-        box = layout.box()
-        box.label(text="Find & Replace:")
         row = box.row(align=True)
-        row.prop(scene, "renamer_find", text="Find:")
-        row.prop(scene, "renamer_replace", text="Replace:")
-        box.operator("renamer.find_replace", text="Find & Replace")
+        row.operator("renamer.populate", text="Update Selection", icon='FILE_REFRESH')
+        row.operator("renamer.populate_collection", text="Add from Collection", icon='COLLECTION_NEW')
+        box.prop(scene, "renamer_clear_on_populate", text="Clear List First")
         
+        # 2. Objects List Section
         box = layout.box()
-        box.label(text="Auto-fill:")
-        box.prop(scene, "renamer_base_name")
-        row = box.row(align=True)
-        row.prop(scene, "renamer_start_number")
-        row.prop(scene, "renamer_zero_padding")
-        box.operator("renamer.autofill", text="Auto-fill Names")
+        box.label(text="Objects to Rename:")
         
+        # List of objects
+        if scene.renamer_items:
+            box.template_list(
+                "RENAMER_UL_items", "",
+                scene, "renamer_items",
+                scene, "renamer_active_index",
+                rows=4
+            )
+            
+            # List controls
+            row = box.row(align=True)
+            row.operator("renamer.move_item", text="", icon='TRIA_UP').direction = 'UP'
+            row.operator("renamer.move_item", text="", icon='TRIA_DOWN').direction = 'DOWN'
+            row.separator()
+            row.operator("renamer.clear", text="Clear List", icon='TRASH')
+        else:
+            box.label(text="No objects in list", icon='INFO')
+            box.operator("renamer.populate", text="Add Selected", icon='ADD')
+
+        # 3. Renaming Tools Section
+        layout.label(text="Prefix/Suffix Tools:", icon='SORTALPHA')
+        
+        # Prefix/Suffix in a single row
+        row = layout.row(align=True)
+        row.prop(scene, "renamer_prefix", text="")
+        row.prop(scene, "renamer_suffix", text="")
+        
+        # Toggle options
+        row = layout.row(align=True)
+        row.prop(scene, "renamer_auto_underscore", 
+                text="Auto _", 
+                toggle=True, 
+                icon='CON_TRANSLIKE')
+        row.prop(scene, "renamer_preserve_base", 
+                text="Keep Base", 
+                toggle=True, 
+                icon='LINKED')
+        
+        # Apply button
+        layout.operator("renamer.apply_prefix_suffix", 
+                      text="Apply Prefix/Suffix", 
+                      icon='SORTALPHA')
+
+        # Find & Replace section
         layout.separator()
-        layout.operator("renamer.execute_rename", text="Apply Rename")
+        layout.label(text="Find & Replace:", icon='FIND_TEXT')
+        
+        # Find/Replace fields
+        row = layout.row(align=True)
+        row.prop(scene, "renamer_find", text="")
+        row.prop(scene, "renamer_replace", text="")
+        
+        # Replace buttons
+        row = layout.row(align=True)
+        row.operator("renamer.find_replace", 
+                   text="Replace All", 
+                   icon='FIND_AND_REPLACE')
+        row.operator("renamer.find_replace", 
+                   text="Selected", 
+                   icon='SELECT_SET').selected_only = True
+
+        # Auto-numbering section
+        layout.separator()
+        layout.label(text="Auto-numbering:", icon='LINENUMBERS_ON')
+        
+        # Base name field
+        layout.prop(scene, "renamer_base_name", text="")
+        
+        # Numbering options
+        row = layout.row(align=True)
+        row.label(text="Start:")
+        row.prop(scene, "renamer_start_number", text="")
+        row.separator()
+        row.label(text="Digits:")
+        row.prop(scene, "renamer_zero_padding", text="")
+        
+        # Auto-fill Button
+        row = layout.row()
+        op = row.operator("renamer.autofill", 
+                         text="Auto-fill Names", 
+                         icon='SORTALPHA')
+        
+        # Debug info (only in debug mode)
+        if bpy.app.debug:
+            debug = layout.column(align=True)
+            debug.label(text="Debug:")
+            debug.label(text=f"Base: '{scene.renamer_base_name}'")
+            debug.label(text=f"Start: {scene.renamer_start_number}")
+            debug.label(text=f"Digits: {scene.renamer_zero_padding}")
+            debug.label(text=f"Items: {len(scene.renamer_items)}")
+
+        # Apply All Changes
+        layout.separator()
+        row = layout.row()
+        op = row.operator("renamer.execute", 
+                         text="Apply All Changes", 
+                         icon='CHECKMARK')
+        op.apply_all = True
