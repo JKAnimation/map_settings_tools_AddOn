@@ -94,11 +94,6 @@ class RENAMER_OT_execute(Operator):
     bl_label = "Apply Rename"
     bl_options = {'REGISTER', 'UNDO'}
     
-    preserve_base: BoolProperty(
-        name="Preserve Base Name",
-        default=True,
-        description="Keep the original base name and only add/remove prefix/suffix"
-    )
     
     def execute(self, context):
         scene = context.scene
@@ -114,7 +109,7 @@ class RENAMER_OT_execute(Operator):
                 suffix = '_' + suffix
         
         for item in scene.renamer_items:
-            if self.preserve_base:
+            if scene.renamer_preserve_base:
                 # Conservar el nombre base original
                 base_name = item.old_name
                 # Remover prefijo y sufijo existentes del nombre original
@@ -132,6 +127,17 @@ class RENAMER_OT_execute(Operator):
                 if suffix and base_name.endswith(suffix):
                     base_name = base_name[:-len(suffix)]
                 item.new_name = f"{prefix}{base_name}{suffix}"
+
+        # Aplicar los nuevos nombres a los objetos reales (usar directamente lo que está en la lista)
+        renamed = 0
+        for item in scene.renamer_items:
+            if item.obj_ref and item.new_name and item.obj_ref.name != item.new_name:
+                item.obj_ref.name = item.new_name
+                if item.obj_ref.data:
+                    item.obj_ref.data.name = item.new_name
+                renamed += 1
+        
+        self.report({'INFO'}, f"Renombrados {renamed} objetos")
             
         return {'FINISHED'}
 
