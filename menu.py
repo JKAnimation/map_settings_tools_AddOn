@@ -94,16 +94,19 @@ class VIEW3D_PT_procesar_mallas(bpy.types.Panel):
         layout = self.layout
         props = getattr(context.scene, "procesar_coleccion_props", None)
 
+        # Siempre mostrar el panel, incluso si props no están disponibles
         if props is not None:
             layout.prop(props, "usar_mesh_activa")
             if not getattr(props, "usar_mesh_activa", False):
                 layout.prop_search(props, "coleccion_target", bpy.data, "collections", text="Colección")
             layout.operator("object.procesar_desde_coleccion", text="Procesar Geometría")
         else:
-            layout.label(text="(Procesar mallas: props no disponibles)")
-
+            # Mostrar mensaje de diagnóstico si props no están disponibles
+            layout.label(text="⚠ Props no registradas correctamente")
+            layout.label(text="Reinicia Blender o revisa el addon")
+            
+        # Siempre mostrar la sección de actualizar FBX
         layout.separator()
-
         layout.label(text="Actualizar FBX desde .blend:")
         actualizar_props = getattr(context.scene, "actualizar_fbx_props", None)
         if actualizar_props is not None:

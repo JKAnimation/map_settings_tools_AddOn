@@ -117,12 +117,28 @@ def register_properties():
 
     # Procesar mallas props
     procesar_mod = modules.get("procesar_mallas")
+    print(f"[MapSettingTools] Diagnóstico procesar_mallas:")
+    print(f"  - Módulo encontrado: {procesar_mod is not None}")
+    if procesar_mod:
+        print(f"  - ProcesarDuplicadorProps disponible: {hasattr(procesar_mod, 'ProcesarDuplicadorProps')}")
+        print(f"  - procesar_coleccion_props ya existe: {hasattr(bpy.types.Scene, 'procesar_coleccion_props')}")
+    
     if procesar_mod and hasattr(bpy.types.Scene, "procesar_coleccion_props") is False:
         if hasattr(procesar_mod, "ProcesarDuplicadorProps"):
             try:
                 bpy.types.Scene.procesar_coleccion_props = bpy.props.PointerProperty(type=getattr(procesar_mod, "ProcesarDuplicadorProps"))
-            except Exception:
-                print("[MapSettingTools] Warning: no se pudo crear procesar_coleccion_props")
+                print("[MapSettingTools] ✅ procesar_coleccion_props creado exitosamente")
+            except Exception as e:
+                print(f"[MapSettingTools] ❌ Error creando procesar_coleccion_props: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[MapSettingTools] ❌ ProcesarDuplicadorProps no encontrado en el módulo")
+    else:
+        if hasattr(bpy.types.Scene, "procesar_coleccion_props"):
+            print("[MapSettingTools] ℹ procesar_coleccion_props ya existe")
+        else:
+            print("[MapSettingTools] ℹ No se registrará procesar_coleccion_props (módulo no encontrado)")
 
     # Actualizar FBX externo props
     actual_mod = modules.get("actualizar_coleccion_externa")
