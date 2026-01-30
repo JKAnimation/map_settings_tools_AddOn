@@ -22,10 +22,10 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
         # FILTRAR OBJETOS
         # --------------------------------------------------
 
-        objects_to_keep = [obj for obj in active_collection.objects if obj.name.startswith("R_")]
+        objects_to_keep = [obj for obj in active_collection.objects if obj.name.startswith(("R_", "H_"))]
         objects_to_delete = [
             obj for obj in active_collection.objects
-            if not obj.name.startswith("R_") and obj.name != "R_Base_Streets"
+            if not obj.name.startswith(("R_", "H_")) and obj.name != "R_Base_Streets"
         ]
 
         for obj in objects_to_delete:
@@ -40,7 +40,7 @@ class OBJECT_OT_clean_figma_curves(bpy.types.Operator):
         transform_and_convert_objects(objects_to_keep)
         apply_subdivision_and_decimate()
 
-        if any(obj.name.startswith("R_Center") for obj in active_collection.objects):
+        if any(obj.name.startswith(("R_Center", "H_Center")) for obj in active_collection.objects):
             recenter_collection_to_r_center(active_collection)
 
         # --------------------------------------------------
@@ -103,13 +103,19 @@ def transform_and_convert_objects(objects):
     for obj in objects:
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
+        if obj.name.startswith("R_"):
+            NScale=400
+        else:
+            NScale=384.256
 
         if obj.type == 'CURVE' and obj.name not in {"R_TransportPath", "R_WOF"}:
             bpy.ops.object.convert(target='MESH')
+        
+
 
         obj.data.name = obj.name
 
-        bpy.ops.transform.resize(value=(400, 400, 400))
+        bpy.ops.transform.resize(value=(NScale, NScale, NScale))
         bpy.ops.transform.rotate(value=math.pi, orient_axis='Z')
         bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 
@@ -142,7 +148,13 @@ def apply_subdivision_and_decimate():
 
 
 def recenter_collection_to_r_center(collection):
-    center_obj = next((o for o in collection.objects if o.name.startswith("R_Center")), None)
+    # Buscar tanto R_Center como H_Center
+    center_obj = next(
+        (o for o in collection.objects 
+         if o.name.startswith(("R_Center", "H_Center"))), 
+        None
+    )
+    
     if not center_obj:
         return
 
@@ -156,7 +168,7 @@ def recenter_collection_to_r_center(collection):
     cursor.location = center_obj.location.copy()
 
     for obj in collection.objects:
-        if obj != center_obj:
+        if obj != center_obj and not obj.name.startswith(("R_Center", "H_Center")):
             bpy.context.view_layer.objects.active = obj
             obj.select_set(True)
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
